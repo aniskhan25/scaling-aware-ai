@@ -1,0 +1,45 @@
+run:
+  name:
+  date:
+  owner:
+  objective:
+
+source:
+  repository:
+  git_commit:
+  branch:
+
+environment:
+  container:
+  python:
+  torch:
+  rocm:
+
+slurm:
+  account:
+  partition:
+  nodes:
+  gpus_per_node:
+  cpus_per_task:
+  walltime:
+
+workload:
+  type:
+  config:
+  scaling_mode: strong
+  samples_per_step:
+  steps:
+  warmup_steps:
+
+outputs:
+  directory:
+  placement:
+  metrics:
+  summary:
+  report:
+
+decision:
+  scale_up:
+  reason:
+  next_action:
+

@@ -1,0 +1,30 @@
+run:
+  run_name: synthetic-16gcd-two-node
+  output_dir: ../../outputs
+
+workload:
+  samples_per_step: 512
+  steps: 40
+  warmup_steps: 5
+  hidden_size: 2048
+  compute_repeats: 6
+
+runtime:
+  require_gpu: true
+  allow_cpu_fallback: false
+
+distributed:
+  expected_world_size: 16
+  expected_nodes: 2
+
+placement:
+  cpu_bind: cores
+  distribution: block:block
+
+output:
+  raw_dir: raw
+  placement_prefix: placement_rank
+  metrics_prefix: metrics_rank
+  run_summary_json: run_summary.json
+  environment_json: environment.json
+

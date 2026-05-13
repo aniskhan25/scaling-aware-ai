@@ -1,0 +1,23 @@
+run:
+  run_name: batch-inference-array
+  output_dir: ../../outputs
+  seed: 9001
+
+data:
+  input_jsonl: ../../examples/batch-inference/data/sample_requests.jsonl
+  id_key: id
+  text_key: text
+  max_records: 0
+
+inference:
+  batch_size: 16
+  input_dim: 1024
+  compute_repeats: 8
+
+runtime:
+  require_gpu: true
+  allow_cpu_fallback: false
+
+output:
+  raw_dir: raw
+  run_summary_json: run_summary.json

@@ -1,0 +1,39 @@
+run:
+  run_name: ddp-training-8gcd-single-node
+  output_dir: ../../outputs
+  seed: 1234
+
+model:
+  input_dim: 2048
+  hidden_dim: 2048
+  num_classes: 1000
+  depth: 4
+
+training:
+  local_batch_size: 256
+  steps: 80
+  warmup_steps: 10
+  learning_rate: 0.0005
+  weight_decay: 0.01
+  synthetic_data_wait_seconds: 0.0
+  write_checkpoint: true
+
+runtime:
+  require_gpu: true
+  allow_cpu_fallback: false
+
+distributed:
+  expected_world_size: 8
+  expected_nodes: 1
+
+placement:
+  cpu_bind: cores
+  distribution: block:block
+
+output:
+  raw_dir: raw
+  placement_prefix: placement_rank
+  metrics_prefix: metrics_rank
+  run_summary_json: run_summary.json
+  environment_json: environment.json
+
