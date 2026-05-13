@@ -14,13 +14,13 @@ Many workloads should not go directly from one visible device to multi-node exec
 
 Use [Hands-On LUMI Scaling Lab](guide/00-hands-on-lumi-lab.md) as the main path.
 
-Before running jobs, replace the placeholder account in `jobs/*.sh` and create a local `env.sh`:
+The job scripts are configured for `project_462000131` and use the LUMI MultiTorch container:
 
 ```bash
-export CONTAINER=/path/to/lumi-ai-container.sif
+export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 ```
 
-`env.sh` is ignored by git. The job scripts source it from the repo root and run the Python workloads inside that container.
+The job scripts load the LUMI AI bindings module and run the Python workloads inside that container.
 
 The core lab sequence is:
 

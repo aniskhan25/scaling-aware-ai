@@ -12,14 +12,10 @@ Work on LUMI from the repository root:
 cd /path/to/scaling-aware-ai
 ```
 
-The job files are configured for the Slurm account `project_462000131`.
-
-Create a local environment file that is not committed:
+The job files are configured for the Slurm account `project_462000131` and the LUMI MultiTorch container:
 
 ```bash
-cat > env.sh <<'EOF'
-export CONTAINER=/path/to/lumi-ai-container.sif
-EOF
+export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 ```
 
 The job scripts load the LUMI AI bindings module and run the Python scripts inside `CONTAINER`.

@@ -17,12 +17,7 @@ module purge
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
-if [ -f env.sh ]; then
-  source env.sh
-elif [ -f ../env.sh ]; then
-  source ../env.sh
-fi
-: "${CONTAINER:?Set CONTAINER to a valid LUMI AI container path.}"
+export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 : "${CONFIG:?Set CONFIG to a batch inference config path.}"
 
 singularity exec "$CONTAINER" bash -lc "
