@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=sai-8gcd
-#SBATCH --account=project_XXXXXXXXX
+#SBATCH --account=project_462000131
 #SBATCH --partition=standard-g
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

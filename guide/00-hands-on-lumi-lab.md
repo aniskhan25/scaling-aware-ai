@@ -12,11 +12,7 @@ Work on LUMI from the repository root:
 cd /path/to/scaling-aware-ai
 ```
 
-Edit the Slurm account in the job files:
-
-```bash
-sed -i 's/project_XXXXXXXXX/project_<your_project>/g' jobs/*.sh
-```
+The job files are configured for the Slurm account `project_462000131`.
 
 Create a local environment file that is not committed:
 
@@ -224,4 +220,3 @@ The lab is complete when the decision says either:
 
 - scale up, with evidence from the current rung
 - stay smaller, with the bottleneck and next fix identified
-

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=sai-ddp-1gcd
-#SBATCH --account=project_XXXXXXXXX
+#SBATCH --account=project_462000131
 #SBATCH --partition=dev-g
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

@@ -129,7 +129,7 @@ sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml job
 sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml jobs/run_ddp_8gcd_config.sh
 ```
 
-Before running, replace `#SBATCH --account=project_XXXXXXXXX` in the job scripts.
+The job scripts are configured for `#SBATCH --account=project_462000131`.
 
 ## Outputs To Read
 

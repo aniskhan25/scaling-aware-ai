@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=sai-batch-inf
-#SBATCH --account=project_XXXXXXXXX
+#SBATCH --account=project_462000131
 #SBATCH --partition=standard-g
 #SBATCH --array=0-7
 #SBATCH --nodes=1
