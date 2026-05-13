@@ -16,7 +16,9 @@ module purge
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
-if [ -f ../env.sh ]; then
+if [ -f env.sh ]; then
+  source env.sh
+elif [ -f ../env.sh ]; then
   source ../env.sh
 fi
 : "${CONTAINER:?Set CONTAINER to a valid LUMI AI container path.}"
@@ -29,4 +31,3 @@ python scripts/inspect_placement.py --config configs/ddp-training/baseline.yaml
 python scripts/run_ddp_training.py --config configs/ddp-training/baseline.yaml
 python scripts/collect_metrics.py --config configs/ddp-training/baseline.yaml
 "
-

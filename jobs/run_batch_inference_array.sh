@@ -17,7 +17,9 @@ module purge
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
-if [ -f ../env.sh ]; then
+if [ -f env.sh ]; then
+  source env.sh
+elif [ -f ../env.sh ]; then
   source ../env.sh
 fi
 : "${CONTAINER:?Set CONTAINER to a valid LUMI AI container path.}"
@@ -27,4 +29,3 @@ set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'
 python scripts/run_batch_inference.py --config configs/batch-inference/job_array.yaml
 "
-

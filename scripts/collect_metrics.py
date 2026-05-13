@@ -42,6 +42,12 @@ def main():
     elapsed_seconds = [float(row["elapsed_seconds"]) for row in metrics]
     samples_per_step = int(metrics[0]["samples_per_step"])
     gpu_visible_count = int(metrics[0].get("gpu_visible_count", 0))
+    data_wait_fractions = [
+        float(row["data_wait_fraction"]) for row in metrics if "data_wait_fraction" in row
+    ]
+    checkpoint_seconds = [
+        float(row["checkpoint_seconds_rank0"]) for row in metrics if "checkpoint_seconds_rank0" in row
+    ]
 
     summary = {
         "run_name": run_dir.name,
@@ -65,6 +71,15 @@ def main():
         "raw_metrics_files": [str(path) for path in metric_files],
         "raw_placement_files": [str(path) for path in placement_files],
     }
+    if data_wait_fractions:
+        summary.update(
+            {
+                "mean_data_wait_fraction": statistics.mean(data_wait_fractions),
+                "max_data_wait_fraction": max(data_wait_fractions),
+            }
+        )
+    if checkpoint_seconds:
+        summary["checkpoint_seconds_rank0"] = max(checkpoint_seconds)
 
     out_path = run_dir / str(cfg["output"]["run_summary_json"])
     write_json(out_path, summary)
@@ -76,4 +91,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

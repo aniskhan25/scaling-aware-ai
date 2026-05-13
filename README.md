@@ -1,12 +1,59 @@
 # Scaling-Aware AI on LUMI
 
-This is a practical guide for deciding **whether a workload should scale up on LUMI-G**, not just how to launch a larger job.
+This is a hands-on lab for deciding **whether a workload should scale up on LUMI-G**.
+
+The repo is meant to be run on LUMI. You submit small Slurm jobs, collect artifacts, compare scaling behavior, induce common bottlenecks, apply a matching fix, and write a scale decision from the measurements.
 
 The central idea is simple:
 
 > Move up the scale ladder only when the current level has produced evidence that scaling is the right next intervention.
 
-Many workloads should not go directly from one visible device to multi-node execution. Some need a better single-GCD baseline. Some need data pipeline work. Some need a full-node run. Some should use job arrays instead of distributed collectives. This guide is about making that distinction from observations.
+Many workloads should not go directly from one visible device to multi-node execution. Some need a better single-GCD baseline. Some need data pipeline work. Some need a full-node run. Some should use job arrays instead of distributed collectives. This lab makes those differences visible by running jobs and reading the resulting evidence.
+
+## Start Here: The Hands-On Lab
+
+Use [Hands-On LUMI Scaling Lab](guide/00-hands-on-lumi-lab.md) as the main path.
+
+Before running jobs, replace the placeholder account in `jobs/*.sh` and create a local `env.sh`:
+
+```bash
+export CONTAINER=/path/to/lumi-ai-container.sif
+```
+
+`env.sh` is ignored by git. The job scripts source it from the repo root and run the Python workloads inside that container.
+
+The core lab sequence is:
+
+```bash
+sbatch jobs/run_1gcd.sh
+sbatch jobs/run_8gcd_single_node.sh
+sbatch jobs/run_16gcd_two_node.sh
+python scripts/compare_scaling.py
+python scripts/validate_scaling_run.py
+python scripts/build_lab_report.py
+```
+
+Then run the two bottleneck/resolution labs:
+
+```bash
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml jobs/run_ddp_8gcd_config.sh
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml jobs/run_ddp_8gcd_config.sh
+
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml jobs/run_batch_inference_array_config.sh
+python scripts/collect_batch_inference.py --config configs/bottlenecks/job_array_imbalanced.yaml
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml jobs/run_batch_inference_array_config.sh
+python scripts/collect_batch_inference.py --config configs/bottlenecks/job_array_balanced.yaml
+
+python scripts/build_lab_report.py
+```
+
+Primary report:
+
+```text
+outputs/lumi_hands_on_lab_report.md
+```
+
+The report is intentionally evidence-first. Missing sections tell you which jobs still need to run.
 
 ## The Scaling Ladder
 
@@ -25,8 +72,9 @@ The guide includes runnable examples, but the examples are there to support this
 
 The code is intentionally minimal. Each script should make one concept visible: placement, throughput, data wait, communication, or shard imbalance. Avoid adding framework-like abstractions unless they make the bottleneck easier to see.
 
-## Start With These Chapters
+## Guide Chapters
 
+0. [Hands-on LUMI lab](guide/00-hands-on-lumi-lab.md)
 1. [Introduction](guide/01-introduction.md)
 2. [LUMI-G mental model](guide/02-lumi-g-mental-model.md)
 3. [Scaling metrics](guide/03-scaling-metrics.md)
@@ -47,7 +95,7 @@ The examples are intentionally small. Their purpose is to expose scaling decisio
 
 ## Minimal Runbook
 
-Use this after reading the decision ladder.
+Use this after completing the hands-on lab once.
 
 Synthetic ladder:
 
@@ -57,6 +105,7 @@ sbatch jobs/run_8gcd_single_node.sh
 sbatch jobs/run_16gcd_two_node.sh
 python scripts/compare_scaling.py
 python scripts/validate_scaling_run.py
+python scripts/build_lab_report.py
 ```
 
 DDP training:
@@ -88,6 +137,7 @@ Do not stop at "the job ran." Read the artifacts:
 
 ```text
 outputs/scaling_report.md
+outputs/lumi_hands_on_lab_report.md
 outputs/scaling_report.json
 outputs/*/run_summary.json
 outputs/*/environment.json

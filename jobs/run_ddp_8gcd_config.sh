@@ -16,7 +16,9 @@ module purge
 module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
-if [ -f ../env.sh ]; then
+if [ -f env.sh ]; then
+  source env.sh
+elif [ -f ../env.sh ]; then
   source ../env.sh
 fi
 : "${CONTAINER:?Set CONTAINER to a valid LUMI AI container path.}"
@@ -30,4 +32,3 @@ python -m torch.distributed.run --standalone --nnodes=1 --nproc_per_node=8 scrip
 python -m torch.distributed.run --standalone --nnodes=1 --nproc_per_node=8 scripts/run_ddp_training.py --config '$CONFIG'
 python scripts/collect_metrics.py --config '$CONFIG'
 "
-

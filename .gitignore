@@ -1,0 +1,5 @@
+env.sh
+outputs/
+__pycache__/
+*.py[cod]
+
