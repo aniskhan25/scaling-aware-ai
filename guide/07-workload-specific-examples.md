@@ -54,22 +54,25 @@ Do not move to multi-node yet if:
 ### Runbook
 
 ```bash
-sbatch jobs/run_ddp_1gcd.sh
-sbatch jobs/run_ddp_8gcd_single_node.sh
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml \
+  jobs/run_ddp_8gcd_config.sh
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml \
+  jobs/run_ddp_8gcd_config.sh
+python scripts/build_lab_report.py
 ```
 
 Read:
 
 ```text
-outputs/ddp-training-1gcd/run_summary.json
-outputs/ddp-training-8gcd-single-node/run_summary.json
-outputs/ddp-training-*/raw/metrics_rank*.json
-outputs/ddp-training-*/raw/placement_rank*.json
+outputs/bottleneck-ddp-data-wait/run_summary.json
+outputs/solution-ddp-data-wait-reduced/run_summary.json
+outputs/*ddp*/raw/metrics_rank*.json
+outputs/*ddp*/raw/placement_rank*.json
 ```
 
 ### Practical Challenge To Demonstrate
 
-Set `synthetic_data_wait_seconds` in `configs/ddp-training/*.yaml` to a small nonzero value and rerun.
+Compare `synthetic_data_wait_seconds` in the two bottleneck configs and rerun both jobs.
 
 Expected lesson:
 
@@ -123,16 +126,24 @@ Do not use a job array when:
 ### Runbook
 
 ```bash
-sbatch jobs/run_batch_inference_array.sh
-python scripts/collect_batch_inference.py --config configs/batch-inference/job_array.yaml
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml \
+  jobs/run_batch_inference_array_config.sh
+python scripts/collect_batch_inference.py \
+  --config configs/bottlenecks/job_array_imbalanced.yaml
+
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml \
+  jobs/run_batch_inference_array_config.sh
+python scripts/collect_batch_inference.py \
+  --config configs/bottlenecks/job_array_balanced.yaml
 ```
 
 Read:
 
 ```text
-outputs/batch-inference-array/run_summary.json
-outputs/batch-inference-array/raw/summary_shard*.json
-outputs/batch-inference-array/raw/outputs_shard*.jsonl
+outputs/bottleneck-job-array-imbalanced/run_summary.json
+outputs/solution-job-array-balanced/run_summary.json
+outputs/*job-array*/raw/summary_shard*.json
+outputs/*job-array*/raw/outputs_shard*.jsonl
 ```
 
 ### Practical Challenge To Demonstrate

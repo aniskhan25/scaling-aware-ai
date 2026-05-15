@@ -1,188 +1,156 @@
 # Scaling-Aware AI on LUMI
 
-This is a hands-on lab for deciding **whether a workload should scale up on LUMI-G**.
+A small hands-on lab for deciding when to scale an AI workload on LUMI-G.
 
-The repo is meant to be run on LUMI. You submit small Slurm jobs, collect artifacts, compare scaling behavior, induce common bottlenecks, apply a matching fix, and write a scale decision from the measurements.
+The repo runs three kinds of experiments:
 
-The central idea is simple:
+- synthetic scaling from 1 GCD to 8 GCDs to 16 GCDs
+- DDP training with induced data wait and a reduced-wait fix
+- batch inference with imbalanced and balanced job-array shards
 
-> Move up the scale ladder only when the current level has produced evidence that scaling is the right next intervention.
+The point is not to benchmark LUMI. The point is to collect enough evidence to decide whether to scale up, fix the current scale, or use job arrays instead of distributed collectives.
 
-Many workloads should not go directly from one visible device to multi-node execution. Some need a better single-GCD baseline. Some need data pipeline work. Some need a full-node run. Some should use job arrays instead of distributed collectives. This lab makes those differences visible by running jobs and reading the resulting evidence.
+## Setup
 
-## Start Here: The Hands-On Lab
-
-Use [Hands-On LUMI Scaling Lab](guide/00-hands-on-lumi-lab.md) as the main path.
-
-The job scripts are configured for `project_462000131` and use the LUMI MultiTorch container:
-
-```bash
-export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
-```
-
-The job scripts load the LUMI AI bindings module and run the Python workloads inside that container.
-
-The full-node and multi-node examples follow the LUMI `srun` pattern: one Slurm task per GPU-visible GCD, 7 CPU cores per task, LUMI CPU bind masks, and `RANK`/`LOCAL_RANK` derived from `SLURM_PROCID`/`SLURM_LOCALID`.
-
-The core lab sequence is:
-
-```bash
-sbatch jobs/run_1gcd.sh
-sbatch jobs/run_8gcd_single_node.sh
-sbatch jobs/run_16gcd_two_node.sh
-python scripts/compare_scaling.py
-python scripts/validate_scaling_run.py
-python scripts/build_lab_report.py
-```
-
-Then run the two bottleneck/resolution labs:
-
-```bash
-sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml jobs/run_ddp_8gcd_config.sh
-sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml jobs/run_ddp_8gcd_config.sh
-
-sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml jobs/run_batch_inference_array_config.sh
-python scripts/collect_batch_inference.py --config configs/bottlenecks/job_array_imbalanced.yaml
-sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml jobs/run_batch_inference_array_config.sh
-python scripts/collect_batch_inference.py --config configs/bottlenecks/job_array_balanced.yaml
-
-python scripts/build_lab_report.py
-```
-
-Primary report:
+The Slurm jobs are configured for:
 
 ```text
-outputs/lumi_hands_on_lab_report.md
+project_462000131
+/appl/local/laifs/containers/lumi-multitorch-latest.sif
 ```
 
-The report is intentionally evidence-first. Missing sections tell you which jobs still need to run.
+Run commands from the repository root on LUMI:
 
-## The Scaling Ladder
+```bash
+cd /path/to/scaling-aware-ai
+```
 
-Use the ladder as a decision process:
+Slurm logs are written to `logs/`. Run artifacts are written to `outputs/`.
 
-| Stage | Question | Evidence To Collect | Move Up When | Stop Or Fix When |
-|---|---|---|---|---|
-| 0. Define the workload | What is the useful work unit? | samples/sec, tokens/sec, records/sec, latency, GPU-hours | the metric matches the objective | the metric is vague or only reports "job completed" |
-| 1. Single-GCD baseline | Is the smallest useful run healthy? | steady-state throughput, memory, data wait, logs | GPU work is stable and repeatable | data loading, memory, startup, or correctness is unstable |
-| 2. Full-node test | Does one LUMI-G node improve useful throughput? | 1 vs 8 GCD speedup, efficiency, rank placement | throughput improves enough for the cost | rank placement is wrong or efficiency collapses |
-| 3. Multi-node test | Does networked scaling add value? | 8 vs 16 GCD speedup, efficiency, per-rank variance | single-node is already strong and multi-node adds useful throughput | inter-node communication dominates |
-| 4. Workload pattern choice | Is distributed execution the right abstraction? | dependency structure of the work | ranks must synchronize | records are independent and a job array is simpler |
-| 5. Production plan | Is the chosen scale worth repeating? | GPU-hours, walltime, artifacts, restart plan | the decision is documented and reproducible | cost or operational risk exceeds the benefit |
+For the detailed walkthrough and interpretation notes, start with:
 
-The guide includes runnable examples, but the examples are there to support this reasoning. They are not the point by themselves.
+```text
+guide/00-hands-on-lumi-lab.md
+```
 
-The code is intentionally minimal. Each script should make one concept visible: placement, throughput, data wait, communication, or shard imbalance. Avoid adding framework-like abstractions unless they make the bottleneck easier to see.
-
-## Guide Chapters
-
-0. [Hands-on LUMI lab](guide/00-hands-on-lumi-lab.md)
-1. [Introduction](guide/01-introduction.md)
-2. [LUMI-G mental model](guide/02-lumi-g-mental-model.md)
-3. [Scaling metrics](guide/03-scaling-metrics.md)
-4. [Scaling decision ladder](guide/04-synthetic-scaling-ladder.md)
-5. [Workload taxonomy](guide/05-workload-taxonomy.md)
-6. [Data pipeline scaling](guide/06-data-pipeline-scaling.md)
-7. [Workload-specific examples](guide/07-workload-specific-examples.md)
-8. [Bottleneck demonstrations](guide/08-bottleneck-demonstrations.md)
-
-## What The Examples Demonstrate
-
-The examples are intentionally small. Their purpose is to expose scaling decisions:
-
-- **Synthetic ladder**: separates launch correctness, placement, compute, and collective communication.
-- **DDP training**: shows why synchronized training needs rank-level metrics, data wait checks, and checkpoint timing.
-- **Batch inference job array**: shows when independent records should avoid distributed collectives entirely.
-- **Bottleneck labs**: induce data starvation, shard imbalance, and too-small-workload behavior, then show what evidence confirms the fix.
-
-## Minimal Runbook
-
-Use this after completing the hands-on lab once.
-
-Synthetic ladder:
+## Run The Scaling Ladder
 
 ```bash
 sbatch jobs/run_1gcd.sh
 sbatch jobs/run_8gcd_single_node.sh
 sbatch jobs/run_16gcd_two_node.sh
+```
+
+After all three jobs finish:
+
+```bash
 python scripts/compare_scaling.py
 python scripts/validate_scaling_run.py
 python scripts/build_lab_report.py
 ```
 
-DDP training:
-
-```bash
-sbatch jobs/run_ddp_1gcd.sh
-sbatch jobs/run_ddp_8gcd_single_node.sh
-```
-
-Batch inference job array:
-
-```bash
-sbatch jobs/run_batch_inference_array.sh
-python scripts/collect_batch_inference.py --config configs/batch-inference/job_array.yaml
-```
-
-Bottleneck demonstrations:
-
-```bash
-sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml jobs/run_ddp_8gcd_config.sh
-sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml jobs/run_ddp_8gcd_config.sh
-```
-
-The job scripts are configured for `#SBATCH --account=project_462000131`.
-
-## Outputs To Read
-
-Do not stop at "the job ran." Read the artifacts:
+Read:
 
 ```text
 outputs/scaling_report.md
 outputs/lumi_hands_on_lab_report.md
-outputs/scaling_report.json
-outputs/*/run_summary.json
-outputs/*/environment.json
-outputs/*/raw/placement_rank*.json
-outputs/*/raw/metrics_rank*.json
+outputs/synthetic-*/run_summary.json
+outputs/synthetic-*/raw/placement_rank*.json
 ```
 
-The important questions are:
+Use the larger scale only when placement is valid and efficiency remains high enough to justify the extra GPU-hours.
 
-- Did the observed rank and node counts match the intended launch?
-- Did per-rank throughput look balanced?
-- Did speedup justify the larger world size?
-- Did efficiency collapse at single-node or only at multi-node?
-- Is the workload synchronized training, independent batch work, or something else?
+## Run The DDP Data-Wait Lab
 
-Use [scale-decision-record.md](templates/scale-decision-record.md) to turn those observations into a documented stop/go decision.
+```bash
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml \
+  jobs/run_ddp_8gcd_config.sh
 
-## Core Rule
+sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml \
+  jobs/run_ddp_8gcd_config.sh
+```
 
-Do not scale an unstable or undersized workload.
+After both jobs finish:
 
-A larger run is useful only if it improves useful throughput enough to justify the communication, launch complexity, queue time, and GPU-hour cost.
+```bash
+python scripts/build_lab_report.py
+```
+
+Read:
+
+```text
+outputs/bottleneck-ddp-data-wait/run_summary.json
+outputs/solution-ddp-data-wait-reduced/run_summary.json
+outputs/lumi_hands_on_lab_report.md
+```
+
+If data wait is high, fix the input pipeline before scaling further.
+
+## Run The Job-Array Imbalance Lab
+
+The imbalanced and balanced inputs contain the same total `work_units`. Only the shard distribution changes.
+
+```bash
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml \
+  jobs/run_batch_inference_array_config.sh
+
+python scripts/collect_batch_inference.py \
+  --config configs/bottlenecks/job_array_imbalanced.yaml
+
+sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml \
+  jobs/run_batch_inference_array_config.sh
+
+python scripts/collect_batch_inference.py \
+  --config configs/bottlenecks/job_array_balanced.yaml
+
+python scripts/build_lab_report.py
+```
+
+Read:
+
+```text
+outputs/bottleneck-job-array-imbalanced/run_summary.json
+outputs/solution-job-array-balanced/run_summary.json
+outputs/lumi_hands_on_lab_report.md
+```
+
+For independent records, balance shards and use job arrays before adding distributed machinery.
+
+## Decision Record
+
+Fill in:
+
+```text
+templates/scale-decision-record.md
+```
+
+Minimum fields:
+
+```text
+Workload objective:
+Useful metric:
+Baseline result:
+Single-node result:
+Multi-node result:
+Observed bottleneck:
+Fix attempted:
+Result after fix:
+Chosen scale:
+What would justify moving up:
+```
 
 ## Repository Layout
 
 ```text
-scaling-aware-ai/
-  README.md
-  ROADMAP.md
-  CONTRIBUTING.md
-  configs/
-  docs/
-  examples/
-  guide/
-  jobs/
-  scripts/
-  templates/
+configs/    YAML configs for each lab
+examples/   JSONL inputs for bottleneck labs
+guide/      Detailed lab guide and scaling background
+jobs/       Slurm job scripts
+logs/       Slurm output directory
+scripts/    Workloads, collectors, validators, report builder
+templates/  Decision record template
 ```
 
-## Project Notes
+## Core Rule
 
-- [Product brief](docs/product-brief.md)
-- [Content architecture](docs/content-architecture.md)
-- [Technical scope](docs/technical-scope.md)
-- [Roadmap](ROADMAP.md)
-- [Contributing guide](CONTRIBUTING.md)
+Do not scale an unstable, data-starved, or badly sharded workload. Scale only after the current rung produces evidence that the next rung is the right next experiment.
