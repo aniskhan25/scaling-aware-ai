@@ -1,16 +1,24 @@
 # Scaling-Aware AI on LUMI
 
-A small hands-on lab for deciding when to scale an AI workload on LUMI-G.
+This is a hands-on tutorial for deciding when an AI workload should scale up on LUMI-G.
 
-The repo runs three kinds of experiments:
+The goal is not to benchmark LUMI. The goal is to run small jobs, collect evidence, and make a defensible scale decision:
 
-- synthetic scaling from 1 GCD to 8 GCDs to 16 GCDs
-- DDP training with induced data wait and a reduced-wait fix
-- batch inference with imbalanced and balanced job-array shards
+- scale up when throughput and efficiency justify the extra GPU-hours
+- fix the current scale when data wait, launch, placement, or workload size is the bottleneck
+- use job arrays when records are independent and do not need distributed collectives
 
-The point is not to benchmark LUMI. The point is to collect enough evidence to decide whether to scale up, fix the current scale, or use job arrays instead of distributed collectives.
+## Core Rule
 
-## Setup
+Do not scale an unstable, data-starved, or badly sharded workload. Scale only after the current rung proves that the next rung is the right next experiment.
+
+## LUMI Setup
+
+Run from the repository root on LUMI:
+
+```bash
+cd /path/to/scaling-aware-ai
+```
 
 The Slurm jobs are configured for:
 
@@ -19,21 +27,84 @@ project_462000131
 /appl/local/laifs/containers/lumi-multitorch-latest.sif
 ```
 
-Run commands from the repository root on LUMI:
-
-```bash
-cd /path/to/scaling-aware-ai
-```
-
 Slurm logs are written to `logs/`. Run artifacts are written to `outputs/`.
 
-For the detailed walkthrough and interpretation notes, start with:
+Full-node and multi-node jobs use the LUMI `srun` pattern:
 
 ```text
-guide/00-hands-on-lumi-lab.md
+--ntasks-per-node=8
+--cpus-per-task=7
+--mem-per-gpu=60G
+srun --cpu-bind=v,mask_cpu=<LUMI masks>
 ```
 
-## Run The Scaling Ladder
+Each task exports:
+
+```bash
+RANK=$SLURM_PROCID
+LOCAL_RANK=$SLURM_LOCALID
+```
+
+## LUMI-G Mental Model
+
+A full LUMI-G node exposes 8 GPU-visible devices to PyTorch:
+
+- 4 AMD MI250X modules
+- 2 GCDs per MI250X
+- 8 software-visible GCDs per node
+- 56 CPU cores available to jobs
+- Slingshot network connectivity for multi-node communication
+
+On LUMI, PyTorch uses the CUDA-compatible API even though the hardware is AMD/ROCm. It is normal for scripts to call `torch.cuda.device_count()`.
+
+The basic diagnostic ladder is:
+
+```text
+1 GCD             baseline compute and local overhead
+8 GCDs, 1 node    intra-node scaling
+16 GCDs, 2 nodes  intra-node plus inter-node scaling
+```
+
+If 8-GCD scaling is weak, fix the local workload, launch, placement, or data path before interpreting multi-node behavior. If 8-GCD scaling is good but 16-GCD scaling drops sharply, inter-node communication or synchronization is more likely.
+
+## Metrics
+
+Use one useful work unit per workload:
+
+- training: samples/sec, tokens/sec, step time
+- batch inference: records/sec, completed outputs
+- embeddings: documents/sec, chunks/sec
+
+Report these together:
+
+```text
+speedup = throughput_target / throughput_baseline
+efficiency = speedup / (target_world_size / baseline_world_size)
+gpu_hours = number_of_gcds * walltime_hours
+```
+
+Raw throughput can improve while the run becomes wasteful. Efficiency and GPU-hours make the cost visible.
+
+Also inspect per-rank or per-shard variance. A distributed job often waits for the slowest rank or shard.
+
+## Scaling Ladder
+
+| Stage | Question | Evidence | Move Up When | Stop Or Fix When |
+|---|---|---|---|---|
+| 0. Define workload | What is useful work? | samples/sec, records/sec, tokens/sec | the metric matches the goal | the metric is only "job completed" |
+| 1. Single GCD | Is the smallest useful run healthy? | throughput, memory, data wait, placement | throughput is stable | input, memory, correctness, or startup is unstable |
+| 2. Full node | Does 8 GCD help? | 1 vs 8 GCD speedup, efficiency, rank placement | efficiency is acceptable | placement is wrong or efficiency collapses |
+| 3. Multi-node | Does the networked run still help? | 8 vs 16 GCD speedup, efficiency, host/rank spread | single-node is strong and multi-node adds value | inter-node communication dominates |
+| 4. Pattern choice | Is distributed execution needed? | dependency structure | ranks must synchronize | records are independent |
+| 5. Decision | Is this scale worth repeating? | report, logs, outputs, GPU-hours | the decision is documented | cost or risk exceeds benefit |
+
+## Lab 1: Synthetic Scaling Ladder
+
+Question:
+
+> Does this workload justify moving from 1 GCD, to one full LUMI-G node, to two nodes?
+
+Submit:
 
 ```bash
 sbatch jobs/run_1gcd.sh
@@ -58,14 +129,32 @@ outputs/synthetic-*/run_summary.json
 outputs/synthetic-*/raw/placement_rank*.json
 ```
 
-Use the larger scale only when placement is valid and efficiency remains high enough to justify the extra GPU-hours.
+Interpretation:
 
-## Run The DDP Data-Wait Lab
+| Observation | Meaning | Next Action |
+|---|---|---|
+| 8-GCD and 16-GCD both scale well | workload may justify larger staged runs | increase scale gradually |
+| 8-GCD good, 16-GCD poor | network or cross-node communication is limiting | inspect communication pattern and workload size |
+| 16-GCD barely improves over 8-GCD | multi-node is not justified for this workload size | stay single-node or increase per-rank work |
+| rank or node count is wrong | result is invalid | fix launch before interpreting performance |
+| per-rank spread is large | imbalance, placement, or CPU affinity may matter | inspect placement files |
+
+## Lab 2: DDP Data Starvation
+
+Question:
+
+> What happens when synchronized training waits for data instead of doing GPU work?
+
+Run the induced bottleneck:
 
 ```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_bottleneck.yaml \
   jobs/run_ddp_8gcd_config.sh
+```
 
+Run the reduced-wait case:
+
+```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/ddp_data_wait_reduced.yaml \
   jobs/run_ddp_8gcd_config.sh
 ```
@@ -84,25 +173,59 @@ outputs/solution-ddp-data-wait-reduced/run_summary.json
 outputs/lumi_hands_on_lab_report.md
 ```
 
-If data wait is high, fix the input pipeline before scaling further.
+Focus on:
 
-## Run The Job-Array Imbalance Lab
+- `total_throughput_samples_per_sec`
+- `mean_data_wait_fraction`
+- `max_data_wait_fraction`
+- `rank_elapsed_spread_seconds`
+
+Real fixes this represents:
+
+- preprocess expensive transforms before training
+- avoid many-small-file reads in the hot path
+- shard data so every rank reads independent work
+- tune dataloader workers and prefetching
+- cache reusable transformed inputs
+
+Decision rule:
+
+If data wait is high, fix the input pipeline before requesting a larger LUMI-G job.
+
+## Lab 3: Job-Array Shard Imbalance
+
+Question:
+
+> For independent batch work, does a distributed launch help, or is the slowest shard the real limiter?
 
 The imbalanced and balanced inputs contain the same total `work_units`. Only the shard distribution changes.
+
+Run the imbalanced case:
 
 ```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml \
   jobs/run_batch_inference_array_config.sh
+```
 
+After the array finishes:
+
+```bash
 python scripts/collect_batch_inference.py \
   --config configs/bottlenecks/job_array_imbalanced.yaml
+```
 
+Run the balanced case:
+
+```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml \
   jobs/run_batch_inference_array_config.sh
+```
 
+After the array finishes:
+
+```bash
 python scripts/collect_batch_inference.py \
   --config configs/bottlenecks/job_array_balanced.yaml
-
 python scripts/build_lab_report.py
 ```
 
@@ -111,20 +234,68 @@ Read:
 ```text
 outputs/bottleneck-job-array-imbalanced/run_summary.json
 outputs/solution-job-array-balanced/run_summary.json
+outputs/*job-array*/raw/summary_shard*.json
 outputs/lumi_hands_on_lab_report.md
 ```
 
-For independent records, balance shards and use job arrays before adding distributed machinery.
+Focus on:
 
-## Decision Record
+- `max_shard_elapsed_seconds`
+- `shard_elapsed_imbalance_ratio`
+- `throughput_records_per_sec_by_max_elapsed`
+- per-shard `work_units_total`
 
-Fill in:
+Real fixes this represents:
+
+- shard by estimated token count, image size, or document length
+- spread known-heavy records across shards
+- use more smaller shards than workers
+- retry failed shards independently
+- write one output and one summary per shard
+
+Decision rule:
+
+For independent records, fix sharding and use job arrays before reaching for distributed collectives.
+
+## Workload Pattern Choice
+
+Use distributed training when:
+
+- ranks cooperate on one model update stream
+- gradients or parameters synchronize
+- every step depends on all ranks
+- global batch behavior matters
+
+Use job arrays or independent workers when:
+
+- records are independent
+- outputs can be merged later
+- failed shards can be retried
+- no rank needs another rank's result during processing
+
+| Workload | Better First Pattern | Why |
+|---|---|---|
+| DDP training | full-node DDP | gradients synchronize each step |
+| corpus embedding | job array or independent workers | documents are independent |
+| batch evaluation | job array | cases can be scored separately |
+| large model that does not fit | sharding or model parallelism | memory, not simple throughput, is the blocker |
+| online serving | replicas and batching | latency and queueing matter |
+
+## Report And Decision Record
+
+Generate or refresh the report:
+
+```bash
+python scripts/build_lab_report.py
+```
+
+Then fill in:
 
 ```text
 templates/scale-decision-record.md
 ```
 
-Minimum fields:
+Minimum decision fields:
 
 ```text
 Workload objective:
@@ -139,18 +310,18 @@ Chosen scale:
 What would justify moving up:
 ```
 
+A useful decision says either:
+
+- scale up, with evidence from the current rung
+- stay smaller, with the bottleneck and next fix identified
+
 ## Repository Layout
 
 ```text
 configs/    YAML configs for each lab
 examples/   JSONL inputs for bottleneck labs
-guide/      Detailed lab guide and scaling background
 jobs/       Slurm job scripts
 logs/       Slurm output directory
 scripts/    Workloads, collectors, validators, report builder
 templates/  Decision record template
 ```
-
-## Core Rule
-
-Do not scale an unstable, data-starved, or badly sharded workload. Scale only after the current rung produces evidence that the next rung is the right next experiment.
