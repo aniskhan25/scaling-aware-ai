@@ -22,6 +22,8 @@ export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 
 The job scripts load the LUMI AI bindings module and run the Python workloads inside that container.
 
+The full-node and multi-node examples follow the LUMI `srun` pattern: one Slurm task per GPU-visible GCD, 7 CPU cores per task, LUMI CPU bind masks, and `RANK`/`LOCAL_RANK` derived from `SLURM_PROCID`/`SLURM_LOCALID`.
+
 The core lab sequence is:
 
 ```bash

@@ -20,6 +20,17 @@ export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 
 The job scripts load the LUMI AI bindings module and run the Python scripts inside `CONTAINER`.
 
+For full-node and multi-node runs, the scripts use one Slurm task per GPU-visible GCD:
+
+```text
+--ntasks-per-node=8
+--cpus-per-task=7
+--mem-per-gpu=60G
+srun --cpu-bind=v,mask_cpu=<LUMI masks>
+```
+
+Each task exports `RANK=$SLURM_PROCID` and `LOCAL_RANK=$SLURM_LOCALID` before starting Python.
+
 ## Lab 1: Scaling Ladder
 
 Question:
