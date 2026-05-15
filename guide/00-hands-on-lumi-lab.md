@@ -136,6 +136,8 @@ Question:
 
 > For independent batch work, does a distributed launch help, or is the slowest shard the real limiter?
 
+The imbalanced and balanced inputs contain the same total `work_units`. The difference is only how that work is distributed across eight array shards.
+
 Run the imbalanced case:
 
 ```bash

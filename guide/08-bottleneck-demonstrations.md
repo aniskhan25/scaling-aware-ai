@@ -113,7 +113,7 @@ Resolution config:
 configs/bottlenecks/job_array_balanced.yaml
 ```
 
-The balanced input spreads heavy records across shards.
+Both inputs contain the same total `work_units`. The bottleneck input concentrates most work on shard 0, while the balanced input spreads the same amount of work evenly across all eight shards.
 
 ### Run
 
