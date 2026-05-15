@@ -1,16 +1,44 @@
 # Scaling-Aware AI on LUMI
 
-This is a hands-on tutorial for deciding when an AI workload should scale up on LUMI-G.
+A hands-on LUMI-G tutorial for making evidence-based scaling decisions for AI workloads.
 
-The goal is not to benchmark LUMI. The goal is to run small jobs, collect evidence, and make a defensible scale decision:
+This repository helps AI and HPC users answer a practical question:
 
-- scale up when throughput and efficiency justify the extra GPU-hours
-- fix the current scale when data wait, launch, placement, or workload size is the bottleneck
-- use job arrays when records are independent and do not need distributed collectives
+> Should this workload use more LUMI-G GPUs, or should I fix the workload first?
+
+The goal is not to benchmark LUMI. The goal is to spend small jobs to avoid wasting large jobs: run controlled experiments, collect evidence, diagnose the bottleneck, and make a defensible scale decision.
+
+Use this repo when you want to:
+
+- test whether a workload benefits from moving from 1 GCD to a full LUMI-G node
+- check whether multi-node execution adds value beyond a single node
+- diagnose data starvation, rank imbalance, launch/placement mistakes, and poor shard distribution
+- compare distributed training with job-array style batch processing
+- produce a short decision record before requesting or repeating larger jobs
 
 ## Core Rule
 
-Do not scale an unstable, data-starved, or badly sharded workload. Scale only after the current rung proves that the next rung is the right next experiment.
+Scaling is a decision, not a default.
+
+Do not scale an unstable, data-starved, badly placed, or badly sharded workload. Scale only when the current rung provides evidence that the next rung is the right next experiment.
+
+A larger job is justified when it improves useful throughput with acceptable efficiency and GPU-hour cost. A larger job is not justified when the bottleneck is input data, launch configuration, rank placement, shard imbalance, or insufficient work per GPU.
+
+## Objective
+
+By the end of this tutorial, you should be able to produce a defensible scale decision for an AI workload on LUMI-G.
+
+A good decision answers:
+
+- What is the useful work unit: samples, tokens, records, documents, or chunks?
+- What is the baseline throughput on the smallest useful run?
+- Does a full LUMI-G node improve throughput enough to justify the extra GPU-hours?
+- Does a multi-node run add value beyond single-node scaling?
+- Is the workload bottlenecked by compute, data wait, communication, placement, or shard imbalance?
+- Should the workload use distributed training, independent workers, or Slurm job arrays?
+- What evidence would justify moving to the next scale?
+
+The expected output is not just a successful Slurm job. The expected output is a scaling report and a decision record.
 
 ## LUMI Setup
 
@@ -56,6 +84,8 @@ A full LUMI-G node exposes 8 GPU-visible devices to PyTorch:
 - Slingshot network connectivity for multi-node communication
 
 On LUMI, PyTorch uses the CUDA-compatible API even though the hardware is AMD/ROCm. It is normal for scripts to call `torch.cuda.device_count()`.
+
+In this README, GCD means the GPU-visible device that Slurm, HIP, and PyTorch treat as one GPU on LUMI-G.
 
 The basic diagnostic ladder is:
 
@@ -312,8 +342,10 @@ What would justify moving up:
 
 A useful decision says either:
 
-- scale up, with evidence from the current rung
-- stay smaller, with the bottleneck and next fix identified
+- scale up: the next rung improves useful throughput with acceptable efficiency and GPU-hour cost
+- stay smaller: the current scale is efficient, and larger runs add little value
+- fix first: data wait, placement, launch overhead, communication, or imbalance hides the real scaling behavior
+- use job arrays: records are independent, and distributed collectives add unnecessary synchronization
 
 ## Repository Layout
 
