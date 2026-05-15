@@ -3,6 +3,7 @@
 
 import argparse
 import time
+from datetime import timedelta
 from pathlib import Path
 
 from _common import load_yaml, rank_info, resolve_run_dir, write_json
@@ -25,7 +26,7 @@ def maybe_init_distributed(world_size, device):
     if not torch.distributed.is_available():
         raise SystemExit("torch.distributed is not available in this environment.")
     if not torch.distributed.is_initialized():
-        kwargs = {"backend": "nccl"}
+        kwargs = {"backend": "nccl", "timeout": timedelta(minutes=10)}
         if device.type == "cuda":
             kwargs["device_id"] = device
         try:
