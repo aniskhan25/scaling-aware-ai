@@ -10,6 +10,7 @@
 #SBATCH --cpus-per-task=7
 #SBATCH --mem-per-gpu=60G
 #SBATCH --time=00:20:00
+#SBATCH --output=logs/slurm-%x-%A_%a.out
 
 set -euo pipefail
 
