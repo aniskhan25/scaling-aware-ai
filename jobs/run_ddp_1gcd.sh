@@ -17,6 +17,7 @@ module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
 export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-7}"
 
 singularity exec "$CONTAINER" bash -lc "
 set -euo pipefail

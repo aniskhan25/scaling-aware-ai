@@ -37,13 +37,20 @@ class TinyClassifier(nn.Module):
         return self.net(x)
 
 
-def init_distributed(world_size):
+def init_distributed(world_size, device):
     if world_size <= 1:
         return False
     if not dist.is_available():
         raise SystemExit("torch.distributed is not available.")
     if not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
+        kwargs = {"backend": "nccl"}
+        if device.type == "cuda":
+            kwargs["device_id"] = device
+        try:
+            dist.init_process_group(**kwargs)
+        except TypeError:
+            kwargs.pop("device_id", None)
+            dist.init_process_group(**kwargs)
     return True
 
 
@@ -81,7 +88,7 @@ def main():
     else:
         device = torch.device("cpu")
 
-    is_distributed = init_distributed(world_size)
+    is_distributed = init_distributed(world_size, device)
 
     seed = int(cfg["run"]["seed"]) + rank
     torch.manual_seed(seed)

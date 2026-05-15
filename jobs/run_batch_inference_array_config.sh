@@ -18,6 +18,7 @@ module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
 export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-7}"
 : "${CONFIG:?Set CONFIG to a batch inference config path.}"
 
 singularity exec "$CONTAINER" bash -lc "

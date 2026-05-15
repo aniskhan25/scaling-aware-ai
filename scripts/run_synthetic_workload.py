@@ -19,13 +19,20 @@ def parse_args():
     return parser.parse_args()
 
 
-def maybe_init_distributed(world_size):
+def maybe_init_distributed(world_size, device):
     if world_size <= 1:
         return False
     if not torch.distributed.is_available():
         raise SystemExit("torch.distributed is not available in this environment.")
     if not torch.distributed.is_initialized():
-        torch.distributed.init_process_group(backend="nccl")
+        kwargs = {"backend": "nccl"}
+        if device.type == "cuda":
+            kwargs["device_id"] = device
+        try:
+            torch.distributed.init_process_group(**kwargs)
+        except TypeError:
+            kwargs.pop("device_id", None)
+            torch.distributed.init_process_group(**kwargs)
     return True
 
 
@@ -59,7 +66,7 @@ def main():
     else:
         device = torch.device("cpu")
 
-    is_distributed = maybe_init_distributed(world_size)
+    is_distributed = maybe_init_distributed(world_size, device)
     if is_distributed:
         torch.distributed.barrier()
 
@@ -127,4 +134,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

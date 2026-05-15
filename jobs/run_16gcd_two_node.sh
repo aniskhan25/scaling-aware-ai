@@ -18,6 +18,7 @@ module use /appl/local/laifs/modules
 module load lumi-aif-singularity-bindings
 
 export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-7}"
 
 export MASTER_ADDR
 MASTER_ADDR="$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)"
