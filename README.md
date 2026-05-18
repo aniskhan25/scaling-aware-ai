@@ -192,6 +192,10 @@ The first central question is:
 
 > Does this workload benefit from moving from 1 GCD to all 8 GCDs on one LUMI-G node?
 
+The default synthetic ladder is intentionally healthy. It is the reference case that proves the launch pattern, placement validation, and scaling calculations are working. If this run returns `GO`, that does not mean every real workload should scale. It means this controlled workload has enough useful work per GCD and no obvious single-node bottleneck.
+
+The later challenge runs deliberately create the cases that should produce `FIX-FIRST`, `NO-GO`, `ARRAY`, `INVALID-RUN`, and `MEASURE-MORE` recommendations.
+
 Run:
 
 ```bash
@@ -224,7 +228,7 @@ Interpretation:
 | noisy baseline | `MEASURE-MORE` | increase measured steps, exclude warmup, repeat |
 | invalid placement | `INVALID-RUN` | fix launch before interpreting throughput |
 
-Poor 1-to-8 efficiency can have several causes. The next sections deliberately create and fix common ones.
+A `GO` here is a checkpoint, not the end of the tutorial. It says the clean synthetic workload can move to the 16-GCD rung. Poor 1-to-8 efficiency can have several causes; the next sections deliberately create and fix common ones so you can recognize when a real workload should not scale yet.
 
 ## Part III: Diagnose Poor Single-Node Scaling
 
