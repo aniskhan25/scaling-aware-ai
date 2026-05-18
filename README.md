@@ -1,46 +1,81 @@
-# Scaling-Aware AI on LUMI
+# Scaling-Aware AI on LUMI: When Should You Use More GPUs?
 
-A hands-on LUMI-G tutorial for making evidence-based scaling decisions for AI workloads.
+A hands-on tutorial for diagnosing whether an AI workload should scale from 1 GCD to 8 GCDs to multiple LUMI-G nodes.
 
-This repository helps AI and HPC users answer a practical question:
+You have an AI workload. You can run it on 1 GCD, 8 GCDs on one full LUMI-G node, or 16+ GCDs across nodes.
 
-> Should this workload use more LUMI-G GPUs, or should I fix the workload first?
+Should you scale?
 
-The goal is not to benchmark LUMI. The goal is to spend small jobs to avoid wasting large jobs: run controlled experiments, collect evidence, diagnose the bottleneck, and make a defensible scale decision.
+This repository helps AI and HPC users answer that question with evidence. The goal is not to benchmark LUMI. The goal is to spend small jobs to avoid wasting large jobs: run controlled experiments, collect evidence, diagnose the bottleneck, and produce a defensible scale decision.
 
 Use this repo when you want to:
 
 - test whether a workload benefits from moving from 1 GCD to a full LUMI-G node
-- check whether multi-node execution adds value beyond a single node
+- check whether multi-node execution adds value beyond one node
 - diagnose data starvation, rank imbalance, launch/placement mistakes, and poor shard distribution
 - compare distributed training with job-array style batch processing
-- produce a short decision record before requesting or repeating larger jobs
+- write a short decision record before requesting or repeating larger jobs
 
-## Core Rule
+## Recommendation Categories
+
+Every experiment should end with one of these recommendations:
+
+| Recommendation | Meaning |
+|---|---|
+| `GO` | Scale to the next rung. Useful throughput improves with acceptable efficiency and GPU-hour cost. |
+| `NO-GO` | Stay at the current rung. Extra GCDs do not buy enough useful throughput. |
+| `FIX-FIRST` | Do not scale yet. A bottleneck is hiding the true scaling behavior. |
+| `ARRAY` | Do not use distributed training. Use independent workers or Slurm job arrays. |
+| `MEMORY-SCALE` | Scaling is justified for memory capacity, not throughput efficiency. |
+| `INVALID-RUN` | Launch, rank count, node count, or placement is wrong. The result cannot be interpreted. |
+| `MEASURE-MORE` | The evidence is too noisy or incomplete. |
 
 Scaling is a decision, not a default.
 
 Do not scale an unstable, data-starved, badly placed, or badly sharded workload. Scale only when the current rung provides evidence that the next rung is the right next experiment.
 
-A larger job is justified when it improves useful throughput with acceptable efficiency and GPU-hour cost. A larger job is not justified when the bottleneck is input data, launch configuration, rank placement, shard imbalance, or insufficient work per GPU.
+## LUMI-G And Billing Basics
 
-## Objective
+In this README, **GCD** means the GPU-visible device that Slurm, HIP, and PyTorch treat as one GPU on LUMI-G.
 
-By the end of this tutorial, you should be able to produce a defensible scale decision for an AI workload on LUMI-G.
+A full LUMI-G node exposes 8 GPU-visible devices:
 
-A good decision answers:
+- 4 AMD MI250X modules
+- 2 GCDs per MI250X
+- 8 software-visible GCDs per node
+- 56 CPU cores available to jobs
+- Slingshot network connectivity for multi-node communication
 
-- What is the useful work unit: samples, tokens, records, documents, or chunks?
-- What is the baseline throughput on the smallest useful run?
-- Does a full LUMI-G node improve throughput enough to justify the extra GPU-hours?
-- Does a multi-node run add value beyond single-node scaling?
-- Is the workload bottlenecked by compute, data wait, communication, placement, or shard imbalance?
-- Should the workload use distributed training, independent workers, or Slurm job arrays?
-- What evidence would justify moving to the next scale?
+PyTorch uses the CUDA-compatible API on LUMI even though the hardware is AMD/ROCm. It is normal for scripts to call `torch.cuda.device_count()`.
 
-The expected output is not just a successful Slurm job. The expected output is a scaling report and a decision record.
+The tutorial ladder is:
 
-## LUMI Setup
+```text
+1 GCD             baseline
+8 GCDs, 1 node    one full LUMI-G node
+16 GCDs, 2 nodes  two LUMI-G nodes
+```
+
+The tutorial does not jump directly to 64 or 128 GCDs. If a workload cannot scale cleanly from 1 to 8 or from 8 to 16, scaling further usually wastes allocation or hides the real bottleneck.
+
+Cost vocabulary:
+
+- `GCD-hour`: one GCD allocated for one hour
+- `LUMI GPU-hour`: one MI250X module allocated for one hour
+- one MI250X has two GCDs
+- therefore `1 LUMI GPU-hour = 2 GCD-hours`
+
+Examples:
+
+| Allocation | GCD-hours per wallclock hour | LUMI GPU-hours per wallclock hour |
+|---|---:|---:|
+| 1 GCD | 1 | 0.5 |
+| 8 GCDs | 8 | 4 |
+| 16 GCDs | 16 | 8 |
+
+On `standard-g`, LUMI-G jobs allocate full nodes. One full LUMI-G node for one hour is billed as 4 LUMI GPU-hours. On `small-g` and `dev-g`, jobs can request GCD-level allocations, but CPU and memory requests can increase the charged amount.
+
+## Setup
 
 Run from the repository root on LUMI:
 
@@ -73,80 +108,101 @@ RANK=$SLURM_PROCID
 LOCAL_RANK=$SLURM_LOCALID
 ```
 
-## LUMI-G Mental Model
+## Metrics Used In This Tutorial
 
-A full LUMI-G node exposes 8 GPU-visible devices to PyTorch:
-
-- 4 AMD MI250X modules
-- 2 GCDs per MI250X
-- 8 software-visible GCDs per node
-- 56 CPU cores available to jobs
-- Slingshot network connectivity for multi-node communication
-
-On LUMI, PyTorch uses the CUDA-compatible API even though the hardware is AMD/ROCm. It is normal for scripts to call `torch.cuda.device_count()`.
-
-In this README, GCD means the GPU-visible device that Slurm, HIP, and PyTorch treat as one GPU on LUMI-G.
-
-The basic diagnostic ladder is:
-
-```text
-1 GCD             baseline compute and local overhead
-8 GCDs, 1 node    intra-node scaling
-16 GCDs, 2 nodes  intra-node plus inter-node scaling
-```
-
-If 8-GCD scaling is weak, fix the local workload, launch, placement, or data path before interpreting multi-node behavior. If 8-GCD scaling is good but 16-GCD scaling drops sharply, inter-node communication or synchronization is more likely.
-
-## Metrics
-
-Use one useful work unit per workload:
+Choose one useful work unit per workload:
 
 - training: samples/sec, tokens/sec, step time
 - batch inference: records/sec, completed outputs
 - embeddings: documents/sec, chunks/sec
 
-Report these together:
+Use the same definitions throughout:
 
 ```text
-speedup = throughput_target / throughput_baseline
-efficiency = speedup / (target_world_size / baseline_world_size)
-gpu_hours = number_of_gcds * walltime_hours
+throughput = useful_work / elapsed_seconds
+speedup_1_to_8 = throughput_8gcd / throughput_1gcd
+efficiency_1_to_8 = speedup_1_to_8 / 8
+incremental_speedup_8_to_16 = throughput_16gcd / throughput_8gcd
+incremental_efficiency_8_to_16 = incremental_speedup_8_to_16 / 2
+logical_gcd_hours = gcd_count * walltime_hours
+estimated_lumi_gpu_hours = logical_gcd_hours / 2
 ```
 
-Raw throughput can improve while the run becomes wasteful. Efficiency and GPU-hours make the cost visible.
+Also inspect:
 
-Also inspect per-rank or per-shard variance. A distributed job often waits for the slowest rank or shard.
+- elapsed time
+- rank elapsed spread
+- shard elapsed imbalance
+- data wait fraction
+- communication fraction when available
+- checkpoint or output-write cost when it affects end-to-end time
 
-## Scaling Ladder
+For synchronized training, the job is only as fast as the slowest rank. Summing local rank throughput can overstate performance if ranks finish at different times. Use the slowest rank elapsed time when computing job throughput:
 
-| Stage | Question | Evidence | Move Up When | Stop Or Fix When |
-|---|---|---|---|---|
-| 0. Define workload | What is useful work? | samples/sec, records/sec, tokens/sec | the metric matches the goal | the metric is only "job completed" |
-| 1. Single GCD | Is the smallest useful run healthy? | throughput, memory, data wait, placement | throughput is stable | input, memory, correctness, or startup is unstable |
-| 2. Full node | Does 8 GCD help? | 1 vs 8 GCD speedup, efficiency, rank placement | efficiency is acceptable | placement is wrong or efficiency collapses |
-| 3. Multi-node | Does the networked run still help? | 8 vs 16 GCD speedup, efficiency, host/rank spread | single-node is strong and multi-node adds value | inter-node communication dominates |
-| 4. Pattern choice | Is distributed execution needed? | dependency structure | ranks must synchronize | records are independent |
-| 5. Decision | Is this scale worth repeating? | report, logs, outputs, GPU-hours | the decision is documented | cost or risk exceeds benefit |
+```text
+synchronized_throughput = total_samples_processed / max_rank_elapsed_time
+```
 
-## Lab 1: Synthetic Scaling Ladder
+## Part I: Prepare A Trustworthy Measurement
 
-Question:
+Before interpreting performance, prove that the launch is valid.
 
-> Does this workload justify moving from 1 GCD, to one full LUMI-G node, to two nodes?
-
-Submit:
+Run:
 
 ```bash
 sbatch jobs/run_1gcd.sh
 sbatch jobs/run_8gcd_single_node.sh
-sbatch jobs/run_16gcd_two_node.sh
 ```
 
-After all three jobs finish:
+After both jobs finish:
+
+```bash
+python scripts/validate_scaling_run.py
+```
+
+Expected valid result:
+
+```text
+VALIDATION_OK=1
+baseline_world_size=1
+single_node_world_size=8
+baseline_gpu_visible_count=1
+```
+
+What to inspect:
+
+```text
+outputs/synthetic-*/raw/placement_rank*.json
+```
+
+A failed placement check blocks every scaling recommendation.
+
+| Symptom | Recommendation | Reason |
+|---|---|---|
+| missing rank files | `INVALID-RUN` | not all ranks launched or wrote metrics |
+| wrong world size | `INVALID-RUN` | the run shape is not what was requested |
+| wrong node count | `INVALID-RUN` | single-node or multi-node interpretation is invalid |
+| duplicate or suspicious device mapping | `INVALID-RUN` | rank-to-GCD placement may be wrong |
+
+Only continue after validation passes.
+
+## Part II: Scale To One Full LUMI-G Node
+
+The first central question is:
+
+> Does this workload benefit from moving from 1 GCD to all 8 GCDs on one LUMI-G node?
+
+Run:
+
+```bash
+sbatch jobs/run_1gcd.sh
+sbatch jobs/run_8gcd_single_node.sh
+```
+
+After both jobs finish:
 
 ```bash
 python scripts/compare_scaling.py
-python scripts/validate_scaling_run.py
 python scripts/build_lab_report.py
 ```
 
@@ -155,25 +211,28 @@ Read:
 ```text
 outputs/scaling_report.md
 outputs/lumi_hands_on_lab_report.md
-outputs/synthetic-*/run_summary.json
-outputs/synthetic-*/raw/placement_rank*.json
+outputs/synthetic-1gcd/run_summary.json
+outputs/synthetic-8gcd-single-node/run_summary.json
 ```
 
 Interpretation:
 
-| Observation | Meaning | Next Action |
+| Observation | Recommendation | Next Action |
 |---|---|---|
-| 8-GCD and 16-GCD both scale well | workload may justify larger staged runs | increase scale gradually |
-| 8-GCD good, 16-GCD poor | network or cross-node communication is limiting | inspect communication pattern and workload size |
-| 16-GCD barely improves over 8-GCD | multi-node is not justified for this workload size | stay single-node or increase per-rank work |
-| rank or node count is wrong | result is invalid | fix launch before interpreting performance |
-| per-rank spread is large | imbalance, placement, or CPU affinity may matter | inspect placement files |
+| high 1-to-8 efficiency and valid placement | `GO` | try the 16-GCD multi-node rung |
+| low 1-to-8 efficiency with valid placement | `FIX-FIRST` or `NO-GO` | diagnose data wait, work size, communication, or imbalance |
+| noisy baseline | `MEASURE-MORE` | increase measured steps, exclude warmup, repeat |
+| invalid placement | `INVALID-RUN` | fix launch before interpreting throughput |
 
-## Lab 2: DDP Data Starvation
+Poor 1-to-8 efficiency can have several causes. The next sections deliberately create and fix common ones.
 
-Question:
+## Part III: Diagnose Poor Single-Node Scaling
 
-> What happens when synchronized training waits for data instead of doing GPU work?
+### Challenge A: Data Starvation
+
+What we break:
+
+We make the input pipeline too slow, so ranks spend too much time waiting for data.
 
 Run the induced bottleneck:
 
@@ -203,14 +262,19 @@ outputs/solution-ddp-data-wait-reduced/run_summary.json
 outputs/lumi_hands_on_lab_report.md
 ```
 
-Focus on:
+Evidence:
 
-- `total_throughput_samples_per_sec`
-- `mean_data_wait_fraction`
-- `max_data_wait_fraction`
-- `rank_elapsed_spread_seconds`
+- high `mean_data_wait_fraction`
+- GPU compute is not the dominant part of the step
+- throughput improves when wait is reduced
 
-Real fixes this represents:
+Recommendation:
+
+```text
+FIX-FIRST
+```
+
+Real fixes:
 
 - preprocess expensive transforms before training
 - avoid many-small-file reads in the hot path
@@ -218,28 +282,82 @@ Real fixes this represents:
 - tune dataloader workers and prefetching
 - cache reusable transformed inputs
 
-Decision rule:
+LUMI-specific CPU note:
 
-If data wait is high, fix the input pipeline before requesting a larger LUMI-G job.
+On a full 8-GCD LUMI-G node, a practical upper bound is 56 allocatable CPU cores. For 8 ranks per node, 7 CPUs per rank is a sensible default. Requesting too many CPUs per rank can hurt scheduling or oversubscribe the node.
 
-## Lab 3: Job-Array Shard Imbalance
+### Challenge B: Too Little Work Per GCD
 
-Question:
+What breaks:
 
-> For independent batch work, does a distributed launch help, or is the slowest shard the real limiter?
+The model, batch, sequence length, or synthetic workload is too small, so launch overhead and synchronization dominate useful compute.
 
-The imbalanced and balanced inputs contain the same total `work_units`. Only the shard distribution changes.
+How to pinpoint it:
 
-Run the imbalanced case:
+- low compute time per step
+- high synchronization overhead relative to compute
+- very small per-rank batch
+- efficiency improves when problem size increases
+
+Fixes:
+
+- increase per-rank batch if memory allows
+- use gradient accumulation
+- increase sequence length or problem size for the benchmark
+- reduce unnecessary synchronization
+- avoid tiny kernels and excessive Python-side step overhead
+
+Recommendation:
+
+```text
+FIX-FIRST
+```
+
+### Challenge C: Binding And Topology Problems
+
+What breaks:
+
+Ranks run with poor CPU/GCD locality or inconsistent binding.
+
+This is a useful distinction:
+
+```text
+A run can be valid but still poorly bound.
+```
+
+How to pinpoint it:
+
+- placement validation passes
+- no missing ranks
+- no duplicate GCDs
+- per-rank throughput varies strongly
+- CPU affinity differs across ranks
+- slow ranks repeat by local rank or socket
+
+Fixes:
+
+- use explicit CPU binding
+- use local rank to select the local GCD
+- use the LUMI `srun` rank-launch pattern
+- avoid letting all ranks accidentally contend for the same device
+
+Recommendation:
+
+```text
+FIX-FIRST
+```
+
+### Challenge D: Load Or Shard Imbalance
+
+What breaks:
+
+Different ranks or shards receive different amounts of work. In synchronized jobs, the slowest rank controls step time. In job arrays, the slowest shard controls walltime.
+
+Run the imbalanced job-array case:
 
 ```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_imbalanced.yaml \
   jobs/run_batch_inference_array_config.sh
-```
-
-After the array finishes:
-
-```bash
 python scripts/collect_batch_inference.py \
   --config configs/bottlenecks/job_array_imbalanced.yaml
 ```
@@ -249,15 +367,12 @@ Run the balanced case:
 ```bash
 sbatch --export=ALL,CONFIG=configs/bottlenecks/job_array_balanced.yaml \
   jobs/run_batch_inference_array_config.sh
-```
-
-After the array finishes:
-
-```bash
 python scripts/collect_batch_inference.py \
   --config configs/bottlenecks/job_array_balanced.yaml
 python scripts/build_lab_report.py
 ```
+
+The imbalanced and balanced inputs contain the same total `work_units`. Only the shard distribution changes.
 
 Read:
 
@@ -265,53 +380,159 @@ Read:
 outputs/bottleneck-job-array-imbalanced/run_summary.json
 outputs/solution-job-array-balanced/run_summary.json
 outputs/*job-array*/raw/summary_shard*.json
-outputs/lumi_hands_on_lab_report.md
 ```
 
-Focus on:
+Evidence:
 
-- `max_shard_elapsed_seconds`
-- `shard_elapsed_imbalance_ratio`
-- `throughput_records_per_sec_by_max_elapsed`
-- per-shard `work_units_total`
+- high `shard_elapsed_imbalance_ratio`
+- high `max_shard_elapsed_seconds`
+- low `throughput_records_per_sec_by_max_elapsed`
+- uneven per-shard `work_units_total`
 
-Real fixes this represents:
+Fixes:
 
 - shard by estimated token count, image size, or document length
 - spread known-heavy records across shards
 - use more smaller shards than workers
-- retry failed shards independently
-- write one output and one summary per shard
+- bucket variable-length samples
+- avoid rank-0-only work inside measured loops
 
-Decision rule:
+Recommendation:
 
-For independent records, fix sharding and use job arrays before reaching for distributed collectives.
+```text
+FIX-FIRST
+```
 
-## Workload Pattern Choice
+## Part IV: Scale Across Nodes
 
-Use distributed training when:
+The second central question is:
 
-- ranks cooperate on one model update stream
-- gradients or parameters synchronize
-- every step depends on all ranks
-- global batch behavior matters
+> Does moving from one LUMI-G node to two nodes add enough useful throughput?
 
-Use job arrays or independent workers when:
+Run:
 
-- records are independent
-- outputs can be merged later
-- failed shards can be retried
-- no rank needs another rank's result during processing
+```bash
+sbatch jobs/run_16gcd_two_node.sh
+```
 
-| Workload | Better First Pattern | Why |
+After the job finishes:
+
+```bash
+python scripts/compare_scaling.py
+python scripts/validate_scaling_run.py
+python scripts/build_lab_report.py
+```
+
+Read:
+
+```text
+outputs/scaling_report.md
+outputs/synthetic-16gcd-two-node/run_summary.json
+outputs/lumi_hands_on_lab_report.md
+```
+
+Key signal:
+
+```text
+incremental_speedup_8_to_16 = throughput_16gcd / throughput_8gcd
+incremental_efficiency_8_to_16 = incremental_speedup_8_to_16 / 2
+```
+
+Interpretation:
+
+| Observation | Recommendation | Reason |
 |---|---|---|
-| DDP training | full-node DDP | gradients synchronize each step |
-| corpus embedding | job array or independent workers | documents are independent |
-| batch evaluation | job array | cases can be scored separately |
-| large model that does not fit | sharding or model parallelism | memory, not simple throughput, is the blocker |
-| online serving | replicas and batching | latency and queueing matter |
+| high 8-to-16 incremental efficiency | `GO` | the second node adds useful throughput |
+| low 8-to-16 incremental efficiency | `NO-GO` | the second node adds little value |
+| valid 1-to-8 but poor 8-to-16 | `NO-GO` or `FIX-FIRST` | inter-node communication or synchronization may dominate |
+| invalid node or rank count | `INVALID-RUN` | the multi-node result cannot be interpreted |
 
-## Report And Decision Record
+A workload can scale well from 1 to 8 and still fail from 8 to 16. The 8-to-16 incremental efficiency is the key multi-node signal.
+
+Possible fixes for poor multi-node scaling:
+
+- increase compute per synchronization
+- use gradient accumulation
+- increase per-rank batch if possible
+- reduce communication volume
+- overlap communication with computation
+- avoid unnecessary barriers
+
+## Part V: Recognize Non-Throughput Scaling Cases
+
+### Checkpoint And Filesystem Overhead
+
+A run can have good steady-state throughput but poor end-to-end throughput because checkpointing or output writes dominate.
+
+How to pinpoint it:
+
+- steady-state step time looks good
+- end-to-end throughput is much worse
+- all ranks write files
+- checkpoint time grows with rank count
+- many small files are created
+
+Fixes:
+
+- checkpoint less frequently
+- use intentional sharded checkpointing
+- avoid all ranks writing duplicate full checkpoints
+- reduce metadata pressure
+- measure steady-state and end-to-end throughput separately
+
+Recommendation:
+
+```text
+FIX-FIRST
+```
+
+### Job Arrays Instead Of Distributed Training
+
+Use job arrays when records are independent:
+
+- inference over unrelated records
+- preprocessing
+- evaluation cases
+- hyperparameter sweeps
+- many unrelated small experiments
+
+Do not use DDP when no rank needs another rank's result.
+
+Recommendation:
+
+```text
+ARRAY
+```
+
+### Memory-Driven Scaling
+
+Sometimes scaling is justified because the workload does not fit, not because throughput efficiency is high.
+
+Examples:
+
+- model weights do not fit on one GCD
+- optimizer state is too large
+- activation memory is too high
+- sequence length or microbatch requires sharding
+
+Try before scaling blindly:
+
+- mixed precision
+- activation checkpointing
+- smaller microbatch
+- gradient accumulation
+- optimizer sharding
+- FSDP or ZeRO-style sharding
+
+Recommendation:
+
+```text
+MEMORY-SCALE
+```
+
+`MEMORY-SCALE` is not the same as `GO`. It means scaling may be necessary for capacity, but you should not claim strong throughput scaling unless the measurements support it.
+
+## Final Recommendation Report
 
 Generate or refresh the report:
 
@@ -325,27 +546,73 @@ Then fill in:
 templates/scale-decision-record.md
 ```
 
-Minimum decision fields:
+A good report includes:
 
 ```text
-Workload objective:
-Useful metric:
-Baseline result:
-Single-node result:
-Multi-node result:
-Observed bottleneck:
-Fix attempted:
-Result after fix:
-Chosen scale:
-What would justify moving up:
+Workload:
+Useful work unit:
+Validation result:
+1-GCD throughput:
+8-GCD throughput:
+16-GCD throughput:
+1-to-8 speedup and efficiency:
+8-to-16 incremental speedup and efficiency:
+GCD-hours and estimated LUMI GPU-hours:
+Data wait:
+Rank or shard imbalance:
+Recommendation:
+Reason:
+Next action:
 ```
 
-A useful decision says either:
+Good recommendation example:
 
-- scale up: the next rung improves useful throughput with acceptable efficiency and GPU-hour cost
-- stay smaller: the current scale is efficient, and larger runs add little value
-- fix first: data wait, placement, launch overhead, communication, or imbalance hides the real scaling behavior
-- use job arrays: records are independent, and distributed collectives add unnecessary synchronization
+```text
+Recommendation: GO
+Reason:
+The workload has valid placement, stable measurements, good single-node efficiency,
+and good incremental multi-node efficiency.
+Next action:
+Run the production workload at 16 GCDs, then repeat this decision process before scaling further.
+```
+
+Bad recommendation example:
+
+```text
+Recommendation: FIX-FIRST
+Reason:
+8-GCD efficiency is poor and data wait is high.
+Placement validation passed, so this is not a launch failure.
+The input pipeline is the dominant bottleneck.
+Next action:
+Fix dataloading and repeat the 8-GCD run.
+Do not run the 16-GCD test yet.
+```
+
+## Decision Tree
+
+```text
+Did validation pass?
+  no -> INVALID-RUN
+Is the baseline stable?
+  no -> MEASURE-MORE
+Is the useful work unit declared?
+  no -> MEASURE-MORE
+Is the workload independent?
+  yes -> ARRAY
+Does the model require more memory?
+  yes -> MEMORY-SCALE
+Is data wait high?
+  yes -> FIX-FIRST
+Is rank or shard imbalance high?
+  yes -> FIX-FIRST
+Is 1-to-8 efficiency poor?
+  yes -> FIX-FIRST or NO-GO
+Is 8-to-16 incremental efficiency poor?
+  yes -> NO-GO unless memory requires scaling
+Otherwise:
+  GO
+```
 
 ## Repository Layout
 
