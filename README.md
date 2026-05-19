@@ -147,7 +147,7 @@ synchronized_throughput = total_samples_processed / max_rank_elapsed_time
 
 Before interpreting performance, prove that the launch is valid.
 
-Run:
+Submit the first two jobs once:
 
 ```bash
 sbatch jobs/run_1gcd.sh
@@ -196,14 +196,9 @@ The default synthetic ladder is intentionally healthy. It is the reference case 
 
 The later challenge runs deliberately create the cases that should produce `FIX-FIRST`, `NO-GO`, `ARRAY`, `INVALID-RUN`, and `MEASURE-MORE` recommendations.
 
-Run:
+Use the same completed jobs from Part I. Do not submit them again unless validation failed or you intentionally changed the job settings.
 
-```bash
-sbatch jobs/run_1gcd.sh
-sbatch jobs/run_8gcd_single_node.sh
-```
-
-After both jobs finish:
+Build the scaling report:
 
 ```bash
 python scripts/compare_scaling.py
