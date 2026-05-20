@@ -78,17 +78,19 @@ def main():
     hidden_size = int(cfg["workload"]["hidden_size"])
     compute_repeats = int(cfg["workload"]["compute_repeats"])
     all_reduce_repeats = int(cfg["workload"].get("all_reduce_repeats", 1))
+    all_reduce_elements = int(cfg["workload"].get("all_reduce_elements", hidden_size))
 
     x = torch.randn(samples_per_step, hidden_size, device=device)
     w = torch.randn(hidden_size, hidden_size, device=device)
     b = torch.randn(hidden_size, device=device)
+    comm_buf = torch.empty(all_reduce_elements, device=device)
 
     def step_body():
         y = x
         for _ in range(compute_repeats):
             y = torch.relu(torch.matmul(y, w) + b)
         if is_distributed:
-            comm_buf = y.mean(dim=0)
+            comm_buf.fill_(float(rank) + float(y.mean().detach()))
             for _ in range(all_reduce_repeats):
                 torch.distributed.all_reduce(comm_buf)
         sync(device)
@@ -121,6 +123,7 @@ def main():
         "hidden_size": hidden_size,
         "compute_repeats": compute_repeats,
         "all_reduce_repeats": all_reduce_repeats,
+        "all_reduce_elements": all_reduce_elements,
         "elapsed_seconds": elapsed,
         "throughput_samples_per_sec": throughput,
     }

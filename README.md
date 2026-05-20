@@ -393,18 +393,20 @@ python scripts/compare_scaling.py \
             configs/bottlenecks/comm_bound_16gcd.yaml
 ```
 
-The demonstrated fix changes the synthetic workload from little compute and many reductions:
+The demonstrated fix changes the synthetic workload from little compute and large repeated reductions:
 
 ```text
 compute_repeats: 1
-all_reduce_repeats: 8
+all_reduce_repeats: 6
+all_reduce_elements: 4194304
 ```
 
-to more compute and fewer reductions:
+to more compute and a small reduction:
 
 ```text
 compute_repeats: 6
 all_reduce_repeats: 1
+all_reduce_elements: 2048
 ```
 
 Run the improved case:

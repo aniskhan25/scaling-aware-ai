@@ -8,7 +8,8 @@ workload:
   warmup_steps: 5
   hidden_size: 2048
   compute_repeats: 1
-  all_reduce_repeats: 8
+  all_reduce_repeats: 6
+  all_reduce_elements: 4194304
 
 runtime:
   require_gpu: true

@@ -9,6 +9,7 @@ workload:
   hidden_size: 2048
   compute_repeats: 6
   all_reduce_repeats: 1
+  all_reduce_elements: 2048
 
 runtime:
   require_gpu: true
