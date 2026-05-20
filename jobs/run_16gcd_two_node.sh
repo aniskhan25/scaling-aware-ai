@@ -30,20 +30,6 @@ CPU_BIND_MASKS="0x00fe000000000000,0xfe00000000000000,0x0000000000fe0000,0x00000
 echo "MASTER_ADDR=$MASTER_ADDR MASTER_PORT=$MASTER_PORT WORLD_SIZE=$WORLD_SIZE"
 echo "SLURM_JOB_NODELIST=$SLURM_JOB_NODELIST SLURM_NTASKS=$SLURM_NTASKS"
 
-singularity exec "$CONTAINER" bash -lc "
-set -euo pipefail
-cd '${SLURM_SUBMIT_DIR:-$PWD}'
-python scripts/summarize_environment.py --config configs/synthetic/two_node.yaml
-"
-
-srun --cpu-bind=v,mask_cpu=$CPU_BIND_MASKS singularity exec "$CONTAINER" bash -lc "
-set -euo pipefail
-cd '${SLURM_SUBMIT_DIR:-$PWD}'
-export RANK=\$SLURM_PROCID
-export LOCAL_RANK=\$SLURM_LOCALID
-python scripts/inspect_placement.py --config configs/synthetic/two_node.yaml
-"
-
 srun --cpu-bind=v,mask_cpu=$CPU_BIND_MASKS singularity exec "$CONTAINER" bash -lc "
 set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'

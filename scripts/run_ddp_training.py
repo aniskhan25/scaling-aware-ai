@@ -2,6 +2,7 @@
 """Run a compact synthetic DDP training workload with workload-specific metrics."""
 
 import argparse
+import socket
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -150,15 +151,6 @@ def main():
     sync(device)
     elapsed = max(1e-9, time.perf_counter() - start)
 
-    checkpoint_seconds = 0.0
-    checkpoint_path = ""
-    if bool(cfg["training"]["write_checkpoint"]) and rank == 0:
-        checkpoint_start = time.perf_counter()
-        checkpoint_path = str(run_dir / "checkpoint.pt")
-        state_dict = model.module.state_dict() if is_distributed else model.state_dict()
-        torch.save({"model": state_dict, "config": cfg}, checkpoint_path)
-        checkpoint_seconds = time.perf_counter() - checkpoint_start
-
     local_samples = steps * local_batch_size
     local_throughput = local_samples / elapsed
     global_samples = local_samples * world_size
@@ -168,6 +160,7 @@ def main():
         "rank": rank,
         "local_rank": local_rank,
         "world_size": world_size,
+        "hostname": socket.gethostname(),
         "device": str(device),
         "gpu_visible_count": gpu_visible_count,
         "steps": steps,
@@ -183,8 +176,6 @@ def main():
         "mean_loss": sum(losses) / max(1, len(losses)),
         "data_wait_seconds_total": data_wait_total,
         "data_wait_fraction": data_wait_total / elapsed,
-        "checkpoint_seconds_rank0": checkpoint_seconds,
-        "checkpoint_path_rank0": checkpoint_path,
     }
 
     out_path = raw_dir / f"{cfg['output']['metrics_prefix']}{rank}.json"

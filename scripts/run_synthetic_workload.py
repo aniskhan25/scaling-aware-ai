@@ -2,6 +2,7 @@
 """Run a compact synthetic scaling workload and emit per-rank metrics."""
 
 import argparse
+import socket
 import time
 from datetime import timedelta
 from pathlib import Path
@@ -109,6 +110,7 @@ def main():
         "rank": rank,
         "local_rank": local_rank,
         "world_size": world_size,
+        "hostname": socket.gethostname(),
         "device": str(device),
         "gpu_visible_count": gpu_visible_count,
         "steps": steps,

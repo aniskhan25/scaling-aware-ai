@@ -23,8 +23,6 @@ export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-7}"
 singularity exec "$CONTAINER" bash -lc "
 set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'
-python scripts/summarize_environment.py --config configs/synthetic/baseline.yaml
-python scripts/inspect_placement.py --config configs/synthetic/baseline.yaml
 python scripts/run_synthetic_workload.py --config configs/synthetic/baseline.yaml
 python scripts/collect_metrics.py --config configs/synthetic/baseline.yaml
 "

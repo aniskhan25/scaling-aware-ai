@@ -28,20 +28,6 @@ export WORLD_SIZE=$SLURM_NPROCS
 
 CPU_BIND_MASKS="0x00fe000000000000,0xfe00000000000000,0x0000000000fe0000,0x00000000fe000000,0x00000000000000fe,0x000000000000fe00,0x000000fe00000000,0x0000fe0000000000"
 
-singularity exec "$CONTAINER" bash -lc "
-set -euo pipefail
-cd '${SLURM_SUBMIT_DIR:-$PWD}'
-python scripts/summarize_environment.py --config '$CONFIG'
-"
-
-srun --cpu-bind=v,mask_cpu=$CPU_BIND_MASKS singularity exec "$CONTAINER" bash -lc "
-set -euo pipefail
-cd '${SLURM_SUBMIT_DIR:-$PWD}'
-export RANK=\$SLURM_PROCID
-export LOCAL_RANK=\$SLURM_LOCALID
-python scripts/inspect_placement.py --config '$CONFIG'
-"
-
 srun --cpu-bind=v,mask_cpu=$CPU_BIND_MASKS singularity exec "$CONTAINER" bash -lc "
 set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'

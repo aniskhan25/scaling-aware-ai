@@ -21,21 +21,17 @@ def main():
     raw_dir = run_dir / str(cfg["output"]["raw_dir"])
 
     metric_files = list_json_files(raw_dir, str(cfg["output"]["metrics_prefix"]))
-    placement_files = list_json_files(raw_dir, str(cfg["output"]["placement_prefix"]))
     if not metric_files:
         raise SystemExit(f"No metrics files found in {raw_dir}")
 
     metrics = [read_json(path) for path in metric_files]
-    placements = [read_json(path) for path in placement_files] if placement_files else []
 
     world_sizes = {int(row["world_size"]) for row in metrics}
     if len(world_sizes) != 1:
         raise SystemExit(f"Inconsistent world sizes in metrics files: {world_sizes}")
     world_size = world_sizes.pop()
 
-    expected_world_size = int(cfg["distributed"]["expected_world_size"])
-    expected_nodes = int(cfg["distributed"]["expected_nodes"])
-    hostnames = sorted({row.get("hostname", "") for row in placements if row.get("hostname", "")})
+    hostnames = sorted({row.get("hostname", "") for row in metrics if row.get("hostname", "")})
     node_count = len(hostnames) if hostnames else 0
 
     throughputs = [float(row["throughput_samples_per_sec"]) for row in metrics]
@@ -45,18 +41,11 @@ def main():
     data_wait_fractions = [
         float(row["data_wait_fraction"]) for row in metrics if "data_wait_fraction" in row
     ]
-    checkpoint_seconds = [
-        float(row["checkpoint_seconds_rank0"]) for row in metrics if "checkpoint_seconds_rank0" in row
-    ]
 
     summary = {
         "run_name": run_dir.name,
         "world_size": world_size,
-        "expected_world_size": expected_world_size,
-        "world_size_matches_expected": world_size == expected_world_size,
         "node_count": node_count,
-        "expected_nodes": expected_nodes,
-        "node_count_matches_expected": node_count == expected_nodes,
         "gpu_visible_count": gpu_visible_count,
         "rank_count": len(metrics),
         "effective_samples_per_step": samples_per_step * world_size,
@@ -69,7 +58,6 @@ def main():
         "rank_elapsed_spread_seconds": max(elapsed_seconds) - min(elapsed_seconds),
         "hostnames": hostnames,
         "raw_metrics_files": [str(path) for path in metric_files],
-        "raw_placement_files": [str(path) for path in placement_files],
     }
     if data_wait_fractions:
         summary.update(
@@ -78,9 +66,6 @@ def main():
                 "max_data_wait_fraction": max(data_wait_fractions),
             }
         )
-    if checkpoint_seconds:
-        summary["checkpoint_seconds_rank0"] = max(checkpoint_seconds)
-
     out_path = run_dir / str(cfg["output"]["run_summary_json"])
     write_json(out_path, summary)
 

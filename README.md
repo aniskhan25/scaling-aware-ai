@@ -377,5 +377,5 @@ configs/    YAML configs for each run
 examples/   JSONL inputs for bottleneck examples
 jobs/       Slurm job scripts
 logs/       Slurm output directory
-scripts/    Workloads, collectors, validators, comparison helpers
+scripts/    Workloads, collectors, and comparison helpers
 ```
