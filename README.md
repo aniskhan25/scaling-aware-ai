@@ -1,4 +1,4 @@
-# Scaling-Aware AI on LUMI: When Should You Use More GPUs?
+# Scaling-Aware AI on LUMI
 
 A hands-on tutorial for deciding whether an AI workload should scale from 1 GCD to a full LUMI-G node to multiple nodes.
 
