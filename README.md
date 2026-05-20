@@ -123,7 +123,7 @@ Print the scaling comparison:
 python scripts/compare_scaling.py
 ```
 
-The same numbers are saved in:
+The printed values are also saved in:
 
 ```text
 outputs/synthetic-1gcd/run_summary.json
@@ -147,7 +147,7 @@ Interpretation:
 
 Good scaling here is a checkpoint, not the end of the tutorial. It says the clean synthetic workload can move to the 16-GCD rung. The next sections deliberately create common bottlenecks so you can recognize when a real workload should not scale yet.
 
-## Part III: Diagnose Poor Single-Node Scaling
+## Part III: Diagnose Bottlenecks Before Scaling
 
 ### Challenge A: Data Starvation
 
@@ -183,7 +183,22 @@ synthetic_data_wait_seconds: 0.005
 
 Everything else stays comparable, so the output shows what happens when the input wait is reduced.
 
-Each job prints its summary path, throughput, rank elapsed spread, and data wait fraction at the end of the Slurm log. You can also read:
+Each job prints its summary path, throughput, rank elapsed spread, and data wait fraction at the end of the Slurm log.
+
+Expected output shape:
+
+```text
+RUN_SUMMARY=.../outputs/bottleneck-ddp-data-wait/run_summary.json
+WORLD_SIZE=8
+NODES=1
+RANKS=8
+TOTAL_THROUGHPUT=...
+RANK_ELAPSED_SPREAD=...
+MEAN_DATA_WAIT_FRACTION=...
+MAX_DATA_WAIT_FRACTION=...
+```
+
+The printed values are also saved in:
 
 ```text
 outputs/bottleneck-ddp-data-wait/run_summary.json
@@ -212,7 +227,9 @@ If data wait is low but 1-to-8 efficiency is still poor, the workload may simply
 
 What breaks:
 
-Different job-array shards receive different amounts of work. The slowest shard controls the walltime.
+Different ranks or shards receive different amounts of work. In synchronized jobs, the slowest rank controls step time. In job arrays, the slowest shard controls walltime.
+
+This example demonstrates the job-array case: the total work is the same, but one input distributes the work unevenly across shards and the other distributes it more evenly.
 
 Run the imbalanced job-array case:
 
@@ -256,7 +273,18 @@ examples/bottlenecks/data/balanced_requests.jsonl
 
 Both inputs contain 216 total `work_units`. The fixed input spreads the work more evenly across the 8 shards, so the slowest shard finishes closer to the others.
 
-The same numbers are saved in:
+Expected collector output shape:
+
+```text
+BATCH_INFERENCE_SUMMARY=.../outputs/bottleneck-job-array-imbalanced/run_summary.json
+RECORDS_WRITTEN=32
+SHARDS_COMPLETED=8
+MAX_SHARD_ELAPSED=...
+SHARD_IMBALANCE_RATIO=...
+THROUGHPUT_BY_SLOWEST_SHARD=...
+```
+
+The printed values are also saved in:
 
 ```text
 outputs/bottleneck-job-array-imbalanced/run_summary.json
