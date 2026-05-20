@@ -28,8 +28,8 @@ def diagnose(eff):
     if eff >= 0.8:
         return "good scaling efficiency"
     if eff >= 0.5:
-        return "moderate scaling efficiency; inspect communication and placement"
-    return "poor scaling efficiency; likely communication, placement, or workload-size bottleneck"
+        return "moderate scaling efficiency; inspect communication and workload size"
+    return "poor scaling efficiency; likely communication or workload-size bottleneck"
 
 
 def metric_row(label, summary, base_thr, base_world):

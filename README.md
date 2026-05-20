@@ -319,6 +319,8 @@ Run:
 sbatch jobs/run_16gcd_two_node.sh
 ```
 
+For the provided synthetic workload, this should usually show that the second node still adds useful throughput. The point is to learn how to read the 8-to-16 incremental efficiency, not to force a failure.
+
 After the job finishes:
 
 ```bash
@@ -336,6 +338,17 @@ TOTAL_THROUGHPUT=...
 RANK_ELAPSED_SPREAD=...
 ```
 
+The comparison uses the completed 1-GCD and 8-GCD runs from Part I and Part II.
+
+Expected comparison output shape:
+
+```text
+| Configuration | World Size | Nodes | Throughput | Speedup | Efficiency | Diagnosis |
+...
+INCREMENTAL_SPEEDUP_8_TO_16=...
+INCREMENTAL_EFFICIENCY_8_TO_16=...
+```
+
 Key signal:
 
 ```text
@@ -349,7 +362,7 @@ Interpretation:
 
 | Observation | What to do | Reason |
 |---|---|---|
-| high 8-to-16 incremental efficiency | keep the two-node result and consider the next rung only if needed | the second node adds useful throughput |
+| high 8-to-16 incremental efficiency | keep the two-node result | the second node adds useful throughput |
 | low 8-to-16 incremental efficiency | stay at one node for this workload | the second node adds little value |
 | valid 1-to-8 but poor 8-to-16 | inspect inter-node communication and synchronization | communication or synchronization may dominate |
 
