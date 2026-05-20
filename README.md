@@ -2,7 +2,7 @@
 
 A hands-on tutorial for deciding whether an AI workload should scale from 1 GCD to a full LUMI-G node to multiple nodes.
 
-Should you scale?
+> Should you scale?
 
 This repository helps AI and HPC users answer that question with evidence. The goal is not to benchmark LUMI. The goal is to spend small jobs to avoid wasting large jobs: run controlled experiments, collect evidence, diagnose the bottleneck, and produce a defensible scale decision.
 
@@ -14,9 +14,8 @@ Use this repo when you want to:
 - compare distributed training with job-array style batch processing
 - print enough performance evidence to decide the next run
 
-Scaling is a decision, not a default.
-
-Do not scale an unstable, data-starved, badly placed, or badly sharded workload. Scale only when the current rung provides evidence that the next rung is the right next experiment.
+> [!IMPORTANT]
+> Scaling is a decision, not a default. Do not scale an unstable, data-starved, badly placed, or badly sharded workload. Scale only when the current rung provides evidence that the next rung is the right next experiment.
 
 ## LUMI-G And Billing Basics
 
@@ -74,7 +73,10 @@ Slurm logs are written to `logs/`. Run artifacts are written to `outputs/`.
 
 ## Part I: Run The Baseline Jobs
 
-Start from a fresh `outputs/` directory, then submit the first two jobs:
+> [!TIP]
+> Start from a fresh `outputs/` directory when rerunning the full tutorial.
+
+Submit the first two jobs:
 
 ```bash
 sbatch jobs/run_1gcd.sh
@@ -137,7 +139,8 @@ speedup_1_to_8 = throughput_8gcd / throughput_1gcd
 efficiency_1_to_8 = speedup_1_to_8 / 8
 ```
 
-These examples keep per-rank work fixed, so the global work per step grows with the number of GCDs. Treat the result as throughput scaling, not proof that a real training workload reaches the same quality faster.
+> [!NOTE]
+> These examples keep per-rank work fixed, so the global work per step grows with the number of GCDs. Treat the result as throughput scaling, not proof that a real training workload reaches the same quality faster.
 
 Interpretation:
 
@@ -215,9 +218,8 @@ Evidence:
 
 `mean_data_wait_fraction` is the fraction of measured step time spent waiting for input data rather than doing useful compute.
 
-Interpretation:
-
-The workload is input-pipeline limited. Do not add more GCDs until the data path can feed the current scale.
+> [!WARNING]
+> The workload is input-pipeline limited. Do not add more GCDs until the data path can feed the current scale.
 
 In a real workload, the same symptom can come from expensive CPU transforms, many small files, slow metadata access, too few dataloader workers, or missing prefetching/caching. The next action is to make the input path faster, then rerun the same 8-GCD comparison.
 
@@ -305,9 +307,8 @@ Evidence:
 
 In a real workload, the same symptom can come from uneven document lengths, image sizes, token counts, or known-heavy records. The next action is to shard by estimated work, then rerun the same job-array comparison.
 
-Interpretation:
-
-The slowest shard controls walltime. Balance the work distribution before increasing scale.
+> [!WARNING]
+> The slowest shard controls walltime. Balance the work distribution before increasing scale.
 
 ## Part IV: Scale Across Nodes
 
