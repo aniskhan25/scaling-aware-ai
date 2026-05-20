@@ -77,6 +77,7 @@ def main():
     warmup_steps = int(cfg["workload"]["warmup_steps"])
     hidden_size = int(cfg["workload"]["hidden_size"])
     compute_repeats = int(cfg["workload"]["compute_repeats"])
+    all_reduce_repeats = int(cfg["workload"].get("all_reduce_repeats", 1))
 
     x = torch.randn(samples_per_step, hidden_size, device=device)
     w = torch.randn(hidden_size, hidden_size, device=device)
@@ -88,7 +89,8 @@ def main():
             y = torch.relu(torch.matmul(y, w) + b)
         if is_distributed:
             comm_buf = y.mean(dim=0)
-            torch.distributed.all_reduce(comm_buf)
+            for _ in range(all_reduce_repeats):
+                torch.distributed.all_reduce(comm_buf)
         sync(device)
 
     for _ in range(warmup_steps):
@@ -118,6 +120,7 @@ def main():
         "samples_per_step": samples_per_step,
         "hidden_size": hidden_size,
         "compute_repeats": compute_repeats,
+        "all_reduce_repeats": all_reduce_repeats,
         "elapsed_seconds": elapsed,
         "throughput_samples_per_sec": throughput,
     }

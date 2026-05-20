@@ -36,7 +36,14 @@ def main():
 
     throughputs = [float(row["throughput_samples_per_sec"]) for row in metrics]
     elapsed_seconds = [float(row["elapsed_seconds"]) for row in metrics]
+    max_elapsed = max(elapsed_seconds)
+    min_elapsed = min(elapsed_seconds)
     samples_per_step = int(metrics[0]["samples_per_step"])
+    local_samples = [
+        int(row.get("local_samples", int(row["steps"]) * int(row["samples_per_step"])))
+        for row in metrics
+    ]
+    total_samples = sum(local_samples)
     gpu_visible_count = int(metrics[0].get("gpu_visible_count", 0))
     data_wait_fractions = [
         float(row["data_wait_fraction"]) for row in metrics if "data_wait_fraction" in row
@@ -52,10 +59,12 @@ def main():
         "mean_rank_throughput_samples_per_sec": statistics.mean(throughputs),
         "min_rank_throughput_samples_per_sec": min(throughputs),
         "max_rank_throughput_samples_per_sec": max(throughputs),
-        "total_throughput_samples_per_sec": sum(throughputs),
-        "max_elapsed_seconds": max(elapsed_seconds),
-        "min_elapsed_seconds": min(elapsed_seconds),
-        "rank_elapsed_spread_seconds": max(elapsed_seconds) - min(elapsed_seconds),
+        "sum_rank_throughput_samples_per_sec": sum(throughputs),
+        "total_samples": total_samples,
+        "total_throughput_samples_per_sec": total_samples / max(1e-9, max_elapsed),
+        "max_elapsed_seconds": max_elapsed,
+        "min_elapsed_seconds": min_elapsed,
+        "rank_elapsed_spread_seconds": max_elapsed - min_elapsed,
         "hostnames": hostnames,
         "raw_metrics_files": [str(path) for path in metric_files],
     }

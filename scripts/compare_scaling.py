@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """Print a compact synthetic scaling comparison."""
 
+import argparse
 from pathlib import Path
 
 from _common import load_yaml, read_json, resolve_path
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--configs",
+        nargs="+",
+        type=Path,
+        help="Config files to compare in order. Defaults to the main 1/8/16-GCD ladder.",
+    )
+    return parser.parse_args()
 
 
 def load_summary(config_path):
@@ -61,23 +73,28 @@ def print_table(rows):
 
 
 def main():
+    args = parse_args()
     guide_dir = Path(__file__).resolve().parents[1]
     configs_dir = guide_dir / "configs" / "synthetic"
 
-    candidates = [
-        ("1gcd", configs_dir / "baseline.yaml"),
-        ("8gcd-single-node", configs_dir / "single_node.yaml"),
-        ("16gcd-two-node", configs_dir / "two_node.yaml"),
+    explicit_configs = bool(args.configs)
+    config_paths = args.configs or [
+        configs_dir / "baseline.yaml",
+        configs_dir / "single_node.yaml",
+        configs_dir / "two_node.yaml",
     ]
 
     loaded = []
-    for label, config_path in candidates:
-        _, summary_path = load_summary(config_path)
+    for config_path in config_paths:
+        cfg, summary_path = load_summary(config_path)
+        label = str(cfg["run"]["run_name"]).replace("synthetic-", "")
         if summary_path.is_file():
             loaded.append((label, summary_path, read_json(summary_path)))
+        elif explicit_configs:
+            raise SystemExit(f"Missing run summary: {summary_path}")
 
-    if not loaded or loaded[0][0] != "1gcd":
-        raise SystemExit("Missing baseline summary. Run jobs/run_1gcd.sh first.")
+    if not loaded:
+        raise SystemExit("No completed run summaries found for the requested configs.")
 
     base_thr = float(loaded[0][2]["total_throughput_samples_per_sec"])
     base_world = int(loaded[0][2]["world_size"])
@@ -85,14 +102,18 @@ def main():
     rows = [metric_row(label, summary, base_thr, base_world) for label, _, summary in loaded]
     print_table(rows)
 
-    if len(rows) >= 3:
-        single = rows[1]["total_throughput_samples_per_sec"]
-        two_node = rows[2]["total_throughput_samples_per_sec"]
-        incremental_speedup = speedup(single, two_node)
-        incremental_efficiency = incremental_speedup / 2.0
+    if len(rows) >= 2:
+        previous = rows[-2]
+        current = rows[-1]
+        incremental_speedup = speedup(
+            previous["total_throughput_samples_per_sec"],
+            current["total_throughput_samples_per_sec"],
+        )
+        world_ratio = current["world_size"] / max(1, previous["world_size"])
+        incremental_efficiency = incremental_speedup / max(1e-9, world_ratio)
         print("")
-        print(f"INCREMENTAL_SPEEDUP_8_TO_16={incremental_speedup:.4f}")
-        print(f"INCREMENTAL_EFFICIENCY_8_TO_16={incremental_efficiency:.4f}")
+        print(f"INCREMENTAL_SPEEDUP={incremental_speedup:.4f}")
+        print(f"INCREMENTAL_EFFICIENCY={incremental_efficiency:.4f}")
 
 
 if __name__ == "__main__":

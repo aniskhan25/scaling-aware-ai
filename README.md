@@ -137,6 +137,8 @@ speedup_1_to_8 = throughput_8gcd / throughput_1gcd
 efficiency_1_to_8 = speedup_1_to_8 / 8
 ```
 
+These examples keep per-rank work fixed, so the global work per step grows with the number of GCDs. Treat the result as throughput scaling, not proof that a real training workload reaches the same quality faster.
+
 Interpretation:
 
 | Observation | What to do | Reason |
@@ -345,8 +347,8 @@ Expected comparison output shape:
 ```text
 | Configuration | World Size | Nodes | Throughput | Speedup | Efficiency | Diagnosis |
 ...
-INCREMENTAL_SPEEDUP_8_TO_16=...
-INCREMENTAL_EFFICIENCY_8_TO_16=...
+INCREMENTAL_SPEEDUP=...
+INCREMENTAL_EFFICIENCY=...
 ```
 
 Key signal:
@@ -369,6 +371,60 @@ Interpretation:
 A workload can scale well from 1 to 8 and still fail from 8 to 16. The 8-to-16 incremental efficiency is the key multi-node signal.
 
 If multi-node scaling is poor, stay on one node for this workload until you have more useful compute per synchronization or less communication overhead.
+
+### Optional Challenge: Communication-Bound Multi-Node Scaling
+
+The healthy synthetic run above has enough compute per synchronization. This optional challenge makes communication more expensive relative to compute, then reduces that pressure.
+
+Run the communication-heavy case:
+
+```bash
+sbatch --export=ALL,CONFIG=configs/bottlenecks/comm_bound_8gcd.yaml \
+  jobs/run_8gcd_single_node.sh
+sbatch --export=ALL,CONFIG=configs/bottlenecks/comm_bound_16gcd.yaml \
+  jobs/run_16gcd_two_node.sh
+```
+
+After both jobs finish:
+
+```bash
+python scripts/compare_scaling.py \
+  --configs configs/bottlenecks/comm_bound_8gcd.yaml \
+            configs/bottlenecks/comm_bound_16gcd.yaml
+```
+
+The demonstrated fix changes the synthetic workload from little compute and many reductions:
+
+```text
+compute_repeats: 1
+all_reduce_repeats: 8
+```
+
+to more compute and fewer reductions:
+
+```text
+compute_repeats: 6
+all_reduce_repeats: 1
+```
+
+Run the improved case:
+
+```bash
+sbatch --export=ALL,CONFIG=configs/bottlenecks/comm_improved_8gcd.yaml \
+  jobs/run_8gcd_single_node.sh
+sbatch --export=ALL,CONFIG=configs/bottlenecks/comm_improved_16gcd.yaml \
+  jobs/run_16gcd_two_node.sh
+```
+
+After both jobs finish:
+
+```bash
+python scripts/compare_scaling.py \
+  --configs configs/bottlenecks/comm_improved_8gcd.yaml \
+            configs/bottlenecks/comm_improved_16gcd.yaml
+```
+
+If incremental efficiency improves, the bottleneck was communication relative to useful compute. In a real workload, the equivalent fix is usually to increase useful compute per synchronization, reduce synchronization frequency, or reduce communication volume.
 
 ## Repository Layout
 

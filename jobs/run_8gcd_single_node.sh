@@ -19,6 +19,7 @@ module load lumi-aif-singularity-bindings
 
 export CONTAINER=/appl/local/laifs/containers/lumi-multitorch-latest.sif
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-7}"
+: "${CONFIG:=configs/synthetic/single_node.yaml}"
 
 export MASTER_ADDR
 MASTER_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
@@ -32,11 +33,11 @@ set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'
 export RANK=\$SLURM_PROCID
 export LOCAL_RANK=\$SLURM_LOCALID
-python scripts/run_synthetic_workload.py --config configs/synthetic/single_node.yaml
+python scripts/run_synthetic_workload.py --config '$CONFIG'
 "
 
 singularity exec "$CONTAINER" bash -lc "
 set -euo pipefail
 cd '${SLURM_SUBMIT_DIR:-$PWD}'
-python scripts/collect_metrics.py --config configs/synthetic/single_node.yaml
+python scripts/collect_metrics.py --config '$CONFIG'
 "
