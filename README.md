@@ -206,6 +206,8 @@ In a real workload, the same symptom can come from expensive CPU transforms, man
 
 CPU allocation can also affect data wait. On a full 8-GCD LUMI-G node, 56 CPU cores are available to jobs, so 7 CPUs per rank is a sensible starting point for 8 ranks. Avoid requesting or spawning more CPU work than the node can support.
 
+If data wait is low but 1-to-8 efficiency is still poor, the workload may simply be too small for 8 GCDs. Increase per-rank batch size, sequence length, or useful compute per step, then rerun the same comparison.
+
 ### Challenge B: Load Or Shard Imbalance
 
 What breaks:
