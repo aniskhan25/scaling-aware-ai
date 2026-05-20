@@ -2,7 +2,7 @@
 
 #SBATCH --job-name=sai-batch-config
 #SBATCH --account=project_462000131
-#SBATCH --partition=standard-g
+#SBATCH --partition=small-g
 #SBATCH --array=0-7
 #SBATCH --nodes=1
 #SBATCH --ntasks=1

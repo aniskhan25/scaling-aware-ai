@@ -86,7 +86,13 @@ def main():
 
     print(f"RUN_SUMMARY={out_path}")
     print(f"WORLD_SIZE={world_size}")
+    print(f"NODES={summary['node_count']}")
+    print(f"RANKS={summary['rank_count']}")
     print(f"TOTAL_THROUGHPUT={summary['total_throughput_samples_per_sec']:.4f}")
+    print(f"RANK_ELAPSED_SPREAD={summary['rank_elapsed_spread_seconds']:.4f}")
+    if data_wait_fractions:
+        print(f"MEAN_DATA_WAIT_FRACTION={summary['mean_data_wait_fraction']:.4f}")
+        print(f"MAX_DATA_WAIT_FRACTION={summary['max_data_wait_fraction']:.4f}")
 
 
 if __name__ == "__main__":

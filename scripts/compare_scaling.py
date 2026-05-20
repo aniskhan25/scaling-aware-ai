@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare synthetic scaling summaries and build a compact report."""
+"""Print a compact synthetic scaling comparison."""
 
 from pathlib import Path
 
-from _common import load_yaml, read_json, resolve_path, write_json
+from _common import load_yaml, read_json, resolve_path
 
 
 def load_summary(config_path):
@@ -48,68 +48,52 @@ def metric_row(label, summary, base_thr, base_world):
     }
 
 
+def print_table(rows):
+    print("| Configuration | World Size | Nodes | Throughput | Speedup | Efficiency | Diagnosis |")
+    print("|---|---:|---:|---:|---:|---:|---|")
+    for row in rows:
+        print(
+            f"| {row['label']} | {row['world_size']} | {row['node_count']} | "
+            f"{row['total_throughput_samples_per_sec']:.2f} | "
+            f"{row['speedup_vs_baseline']:.2f} | "
+            f"{row['efficiency_vs_baseline']:.2f} | {row['diagnosis']} |"
+        )
+
+
 def main():
     guide_dir = Path(__file__).resolve().parents[1]
     configs_dir = guide_dir / "configs" / "synthetic"
 
-    baseline_cfg, baseline_summary_path = load_summary(configs_dir / "baseline.yaml")
-    _, single_summary_path = load_summary(configs_dir / "single_node.yaml")
-    _, two_node_summary_path = load_summary(configs_dir / "two_node.yaml")
-
-    baseline_summary = read_json(baseline_summary_path)
-    single_summary = read_json(single_summary_path)
-    two_node_summary = read_json(two_node_summary_path)
-
-    base_thr = float(baseline_summary["total_throughput_samples_per_sec"])
-    base_world = int(baseline_summary["world_size"])
-
-    rows = [
-        metric_row("1gcd", baseline_summary, base_thr, base_world),
-        metric_row("8gcd-single-node", single_summary, base_thr, base_world),
-        metric_row("16gcd-two-node", two_node_summary, base_thr, base_world),
+    candidates = [
+        ("1gcd", configs_dir / "baseline.yaml"),
+        ("8gcd-single-node", configs_dir / "single_node.yaml"),
+        ("16gcd-two-node", configs_dir / "two_node.yaml"),
     ]
 
-    outputs_dir = resolve_path((configs_dir / "baseline.yaml").parent, str(baseline_cfg["run"]["output_dir"]))
-    out_json = outputs_dir / "scaling_report.json"
-    out_md = outputs_dir / "scaling_report.md"
+    loaded = []
+    for label, config_path in candidates:
+        _, summary_path = load_summary(config_path)
+        if summary_path.is_file():
+            loaded.append((label, summary_path, read_json(summary_path)))
 
-    payload = {
-        "baseline_summary_path": str(baseline_summary_path),
-        "single_node_summary_path": str(single_summary_path),
-        "two_node_summary_path": str(two_node_summary_path),
-        "rows": rows,
-    }
-    write_json(out_json, payload)
+    if not loaded or loaded[0][0] != "1gcd":
+        raise SystemExit("Missing baseline summary. Run jobs/run_1gcd.sh first.")
 
-    lines = [
-        "# Synthetic Scaling Report",
-        "",
-        "| Configuration | World Size | Nodes | Throughput | Speedup | Efficiency | Diagnosis |",
-        "|---|---:|---:|---:|---:|---:|---|",
-    ]
-    for row in rows:
-        lines.append(
-            f"| {row['label']} | {row['world_size']} | {row['node_count']} | "
-            f"{row['total_throughput_samples_per_sec']:.2f} | {row['speedup_vs_baseline']:.2f} | "
-            f"{row['efficiency_vs_baseline']:.2f} | {row['diagnosis']} |"
-        )
-    lines.extend(
-        [
-            "",
-            "## Interpretation",
-            "",
-            "- Prefer a larger configuration only if useful throughput improves enough to justify the added communication and GPU-hours.",
-            "- Validate placement metadata before interpreting poor scaling as a model or framework problem.",
-            "- If single-node scaling is already poor, fix that before trusting multi-node results.",
-        ]
-    )
+    base_thr = float(loaded[0][2]["total_throughput_samples_per_sec"])
+    base_world = int(loaded[0][2]["world_size"])
 
-    out_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    rows = [metric_row(label, summary, base_thr, base_world) for label, _, summary in loaded]
+    print_table(rows)
 
-    print(f"SCALING_REPORT_JSON={out_json}")
-    print(f"SCALING_REPORT_MD={out_md}")
+    if len(rows) >= 3:
+        single = rows[1]["total_throughput_samples_per_sec"]
+        two_node = rows[2]["total_throughput_samples_per_sec"]
+        incremental_speedup = speedup(single, two_node)
+        incremental_efficiency = incremental_speedup / 2.0
+        print("")
+        print(f"INCREMENTAL_SPEEDUP_8_TO_16={incremental_speedup:.4f}")
+        print(f"INCREMENTAL_EFFICIENCY_8_TO_16={incremental_efficiency:.4f}")
 
 
 if __name__ == "__main__":
     main()
-

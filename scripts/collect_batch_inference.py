@@ -56,6 +56,13 @@ def main():
     write_json(out_path, aggregate)
     print(f"BATCH_INFERENCE_SUMMARY={out_path}")
     print(f"RECORDS_WRITTEN={total_records}")
+    print(f"SHARDS_COMPLETED={aggregate['shards_completed']}")
+    print(f"MAX_SHARD_ELAPSED={aggregate['max_shard_elapsed_seconds']:.4f}")
+    print(f"SHARD_IMBALANCE_RATIO={aggregate['shard_elapsed_imbalance_ratio']:.4f}")
+    print(
+        "THROUGHPUT_BY_SLOWEST_SHARD="
+        f"{aggregate['throughput_records_per_sec_by_max_elapsed']:.4f}"
+    )
 
 
 if __name__ == "__main__":
